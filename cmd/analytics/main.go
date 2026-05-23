@@ -214,14 +214,17 @@ func (a *analyticsApp) startAuxMonitor() {
 	var cmd *exec.Cmd
 
 	if runtime.GOOS == "windows" {
-		// Windows: Usar PowerShell para setear AUX=true correctamente
-		// PowerShell abre una ventana nueva y monitor.exe hereda la variable de entorno
+		// Windows: abrir una terminal nueva y definir AUX dentro de esa terminal.
 		cmd = exec.Command(
-			"powershell",
+			"cmd.exe",
+			"/c",
+			"start",
+			"Monitor Auxiliar",
+			"powershell.exe",
 			"-NoProfile",
 			"-NoExit",
 			"-Command",
-			`$env:AUX = 'true'; & '.\monitor.exe'`,
+			`$env:AUX='true'; $env:CITY_CONFIG='configs\city.json'; & '.\monitor.exe'`,
 		)
 	} else {
 		// Linux/macOS: Lanzar en segundo plano con AUX=true
@@ -234,6 +237,11 @@ func (a *analyticsApp) startAuxMonitor() {
 
 	if err := cmd.Start(); err != nil {
 		log.Printf("[analytics] Error iniciando Monitor Auxiliar: %v", err)
+		return
+	}
+
+	if runtime.GOOS == "windows" {
+		log.Printf("[analytics] Monitor Auxiliar lanzado en terminal separada escuchando en %s", a.cfg.Endpoints.MonitorAuxiliar)
 		return
 	}
 
