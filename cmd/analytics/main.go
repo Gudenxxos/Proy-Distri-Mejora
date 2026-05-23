@@ -222,7 +222,7 @@ func (a *analyticsApp) startAuxMonitor() {
 			"Monitor Auxiliar",
 			"cmd",
 			"/k",
-			"set AUX=true && set CITY_CONFIG=configs/city.json && cd /d . && .\\monitor.exe",
+			`set "AUX=true" && set "CITY_CONFIG=configs\city.json" && cd /d . && .\monitor.exe`,
 		)
 	} else {
 		// Linux/macOS: Lanzar en segundo plano
