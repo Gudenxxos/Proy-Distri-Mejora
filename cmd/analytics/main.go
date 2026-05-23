@@ -214,16 +214,15 @@ func (a *analyticsApp) startAuxMonitor() {
 	var cmd *exec.Cmd
 
 	if runtime.GOOS == "windows" {
-		// Windows: Lanzar en una terminal separada usando 'start'
-		// La variable AUX=true se setea dentro del mismo comando cmd
+		// Windows: Usar PowerShell para setear AUX=true correctamente
+		// PowerShell abre una ventana nueva y monitor.exe hereda la variable de entorno
 		cmd = exec.Command(
-			"cmd",
-			"/c",
-			`start "Monitor Auxiliar" cmd /k "set AUX=true && .\monitor.exe"`,
+			"powershell",
+			"-NoProfile",
+			"-NoExit",
+			"-Command",
+			`$env:AUX = 'true'; & '.\monitor.exe'`,
 		)
-		// IMPORTANTE: Pasar AUX=true también a través de cmd.Env
-		// porque 'start' abre en nueva ventana y puede no heredar variables
-		cmd.Env = append(os.Environ(), "AUX=true")
 	} else {
 		// Linux/macOS: Lanzar en segundo plano con AUX=true
 		cmd = exec.Command(
@@ -231,7 +230,6 @@ func (a *analyticsApp) startAuxMonitor() {
 			"-c",
 			"AUX=true ./monitor &",
 		)
-		cmd.Env = append(os.Environ(), "AUX=true")
 	}
 
 	if err := cmd.Start(); err != nil {
