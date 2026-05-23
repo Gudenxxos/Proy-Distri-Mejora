@@ -5,7 +5,7 @@
   "base_green_seconds": 15,
   "congestion_extension_seconds": 10,
   "priority_wave_seconds": 30,
-  "health_check_interval_ms": 5000,
+  "health_check_interval_ms": 3000,
   "health_check_timeout_ms": 2000,
   "endpoints": {
     "broker_ingest": "tcp://10.43.100.155:6001",

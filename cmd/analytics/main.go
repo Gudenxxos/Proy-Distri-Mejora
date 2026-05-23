@@ -219,7 +219,7 @@ func (a *analyticsApp) startAuxMonitor() {
 
 	// Crear comando con variable de entorno AUX=true
 	cmd := exec.Command(monitorExe)
-	
+
 	// Construir ambiente limpio con solo las vars necesarias (evita duplicados)
 	env := os.Environ()
 	auxFound := false
@@ -233,7 +233,7 @@ func (a *analyticsApp) startAuxMonitor() {
 	if !auxFound {
 		env = append(env, "AUX=true")
 	}
-	
+
 	cmd.Env = env
 	cmd.Dir = "."
 
@@ -244,7 +244,7 @@ func (a *analyticsApp) startAuxMonitor() {
 		auxLogFile = os.Stdout
 	}
 	defer auxLogFile.Close()
-	
+
 	cmd.Stdout = auxLogFile
 	cmd.Stderr = auxLogFile
 
