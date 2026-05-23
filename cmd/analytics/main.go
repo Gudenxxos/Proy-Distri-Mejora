@@ -215,18 +215,18 @@ func (a *analyticsApp) startAuxMonitor() {
 
 	if runtime.GOOS == "windows" {
 		// Windows: Lanzar en una terminal separada usando 'start'
-		// Sintaxis: start "título" cmd /k "comandos separados por &"
+		// Usa && para asegurar que AUX=true se setea antes de ejecutar monitor
 		cmd = exec.Command(
 			"cmd",
 			"/c",
-			`start "Monitor Auxiliar" cmd /k "set AUX=true & cd /d . & .\monitor.exe"`,
+			`start "Monitor Auxiliar" cmd /k "set AUX=true && .\monitor.exe"`,
 		)
 	} else {
 		// Linux/macOS: Lanzar en segundo plano con AUX=true
 		cmd = exec.Command(
 			"sh",
 			"-c",
-			"AUX=true CITY_CONFIG=configs/city.json ./monitor &",
+			"AUX=true ./monitor &",
 		)
 	}
 
