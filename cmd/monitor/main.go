@@ -25,8 +25,8 @@ func main() {
 	}
 
 	// Verificar si se ejecuta en modo auxiliar
-	auxEnvValue := getenv("AUX", "false")
-	isAux := strings.ToLower(auxEnvValue) == "true"
+	auxEnvValue := strings.TrimSpace(getenv("AUX", "false"))
+	isAux := strings.EqualFold(auxEnvValue, "true")
 
 	log.Printf("[monitor] Iniciando con AUX=%s (modo=%s)", auxEnvValue, map[bool]string{true: "AUXILIAR", false: "CLI"}[isAux])
 
