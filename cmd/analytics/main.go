@@ -211,11 +211,19 @@ func (a *analyticsApp) startAuxMonitor() {
 
 	log.Printf("[analytics] Iniciando Monitor Auxiliar en PC2 (en terminal separada)...")
 
+	if runtime.GOOS == "windows" {
+		// Primero: Setear AUX=true en el proceso actual (Windows)
+		setAuxCmd := exec.Command("cmd", "/c", "set AUX=true")
+		if err := setAuxCmd.Run(); err != nil {
+			log.Printf("[analytics] Warning al setear AUX=true: %v", err)
+		}
+	}
+
 	var cmd *exec.Cmd
 
 	if runtime.GOOS == "windows" {
 		// Windows: Lanzar en una terminal separada usando 'start'
-		// Usa && para asegurar que AUX=true se setea antes de ejecutar monitor
+		// La variable AUX=true ya se seteó arriba
 		cmd = exec.Command(
 			"cmd",
 			"/c",
