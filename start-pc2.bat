@@ -11,7 +11,7 @@ echo ========================================
 echo.
 
 echo.
-echo [1/3] Compiling db-server...
+echo [1/4] Compiling db-server...
 go build -o db-server.exe ./cmd/db-server
 if errorlevel 1 (
     echo ERROR: Failed to compile db-server
@@ -21,7 +21,7 @@ if errorlevel 1 (
 echo [✓] db-server compiled successfully
 
 echo.
-echo [2/3] Compiling traffic-light...
+echo [2/4] Compiling traffic-light...
 go build -o traffic-light.exe ./cmd/traffic-light
 if errorlevel 1 (
     echo ERROR: Failed to compile traffic-light
@@ -31,7 +31,7 @@ if errorlevel 1 (
 echo [✓] traffic-light compiled successfully
 
 echo.
-echo [3/3] Compiling analytics...
+echo [3/4] Compiling analytics...
 go build -o analytics.exe ./cmd/analytics
 if errorlevel 1 (
     echo ERROR: Failed to compile analytics
@@ -39,6 +39,16 @@ if errorlevel 1 (
     exit /b 1
 )
 echo [✓] analytics compiled successfully
+
+echo.
+echo [4/4] Compiling monitor...
+go build -o monitor.exe .\cmd\monitor
+if errorlevel 1 (
+    echo ERROR: Failed to compile monitor
+    pause
+    exit /b 1
+)
+echo [✓] monitor compiled successfully
 
 echo.
 echo ========================================
