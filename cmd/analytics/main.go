@@ -199,7 +199,7 @@ func (a *analyticsApp) setPC3HealthStatus(healthy bool, format string, args ...i
 	}
 }
 
-// startAuxMonitor lanza el proceso de Monitor en modo auxiliar (AUX=true)
+// startAuxMonitor lanza el proceso de Monitor en modo auxiliar (AUX=true) en una terminal separada
 func (a *analyticsApp) startAuxMonitor() {
 	a.auxMonitorMutex.Lock()
 	defer a.auxMonitorMutex.Unlock()
@@ -209,44 +209,29 @@ func (a *analyticsApp) startAuxMonitor() {
 		return
 	}
 
-	log.Printf("[analytics] Iniciando Monitor Auxiliar en PC2...")
+	log.Printf("[analytics] Iniciando Monitor Auxiliar en PC2 (en terminal separada)...")
 
-	// Determinar el ejecutable según SO
-	monitorExe := "./monitor"
+	var cmd *exec.Cmd
+
 	if runtime.GOOS == "windows" {
-		monitorExe = ".\\monitor.exe"
+		// Windows: Lanzar en una terminal separada usando 'start'
+		cmd = exec.Command(
+			"cmd",
+			"/c",
+			"start",
+			"Monitor Auxiliar",
+			"cmd",
+			"/k",
+			"set AUX=true && set CITY_CONFIG=configs/city.json && cd /d . && .\\monitor.exe",
+		)
+	} else {
+		// Linux/macOS: Lanzar en segundo plano
+		cmd = exec.Command(
+			"sh",
+			"-c",
+			"AUX=true CITY_CONFIG=configs/city.json ./monitor &",
+		)
 	}
-
-	// Crear comando con variable de entorno AUX=true
-	cmd := exec.Command(monitorExe)
-
-	// Construir ambiente limpio con solo las vars necesarias (evita duplicados)
-	env := os.Environ()
-	auxFound := false
-	for i, e := range env {
-		if strings.HasPrefix(e, "AUX=") {
-			env[i] = "AUX=true"
-			auxFound = true
-			break
-		}
-	}
-	if !auxFound {
-		env = append(env, "AUX=true")
-	}
-
-	cmd.Env = env
-	cmd.Dir = "."
-
-	// Redirigir stdout/stderr a archivos para debug
-	auxLogFile, err := os.Create("monitor_auxiliar.log")
-	if err != nil {
-		log.Printf("[analytics] Error creando archivo de log auxiliar: %v", err)
-		auxLogFile = os.Stdout
-	}
-	defer auxLogFile.Close()
-
-	cmd.Stdout = auxLogFile
-	cmd.Stderr = auxLogFile
 
 	if err := cmd.Start(); err != nil {
 		log.Printf("[analytics] Error iniciando Monitor Auxiliar: %v", err)
