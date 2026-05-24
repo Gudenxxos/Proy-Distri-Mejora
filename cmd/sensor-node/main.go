@@ -67,9 +67,9 @@ func publish(pub zmq4.Socket, topic string, payload any) {
 
 func buildEvent(profile config.SensorProfile) (string, any) {
 	now := time.Now().UTC()
-	baseQueue := rand.Intn(7) + 1
-	baseSpeed := float64(rand.Intn(25) + 20)
-	baseDensity := float64(rand.Intn(20) + 10)
+	baseQueue := rand.Intn(9) + 1
+	baseSpeed := float64(rand.Intn(20) + 10)
+	baseDensity := float64(rand.Intn(10) + 30)
 
 	switch strings.ToLower(profile.SensorType) {
 	case "camara":
