@@ -11,6 +11,7 @@ type Endpoints struct {
 	AnalyticsREP              string `json:"analytics_rep"`
 	TrafficLightPull          string `json:"traffic_light_pull"`
 	TrafficLightExecutedPush  string `json:"traffic_light_executed_push"` // Donde traffic-light envía comandos ejecutados
+	VisualizerLightPush       string `json:"visualizer_light_push"`       // Donde analytics envía comandos al visualizer
 	DBPrimaryPull             string `json:"db_primary_pull"`
 	DBReplicaPull             string `json:"db_replica_pull"`
 	DBPrimaryREP              string `json:"db_primary_rep"`

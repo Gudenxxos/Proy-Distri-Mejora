@@ -25,6 +25,7 @@ func main() {
 
 	app := newVisualizer(cfg)
 	go app.consumeBroker()
+	go app.consumeLightCommands()
 
 	http.HandleFunc("/", app.handleIndex)
 	http.HandleFunc("/api/state", app.handleState)
@@ -70,7 +71,8 @@ func (v *visualizer) consumeBroker() {
 	if err := sub.Dial(v.cfg.Endpoints.BrokerFanout); err != nil {
 		log.Fatalf("visualizer dial fanout: %v", err)
 	}
-	for _, topic := range []string{model.TopicSnapshot, model.TopicCommand, model.TopicLightState} {
+	// Solo suscribirse a eventos de sensores
+	for _, topic := range []string{model.TopicCamera, model.TopicGPS, model.TopicInductive} {
 		if err := sub.SetOption(zmq4.OptionSubscribe, topic); err != nil {
 			log.Fatalf("visualizer subscribe %s: %v", topic, err)
 		}
@@ -89,23 +91,81 @@ func (v *visualizer) consumeBroker() {
 		payload := msg.Frames[1]
 
 		v.mu.Lock()
+		// Procesar eventos de sensores para actualizar datos de intersecciones
 		switch topic {
-		case model.TopicSnapshot:
-			var env model.PersistEnvelope
-			if json.Unmarshal(payload, &env) == nil && env.Snapshot != nil {
-				v.state[env.Snapshot.Intersection] = *env.Snapshot
-			}
-		case model.TopicLightState:
-			var event model.LightStateEvent
+		case model.TopicCamera:
+			var event model.CameraEvent
 			if json.Unmarshal(payload, &event) == nil {
-				item := v.state[event.Intersection]
-				item.Intersection = event.Intersection
-				item.LightState = event.LightState
-				v.state[event.Intersection] = item
+				item := v.state[event.Interseccion]
+				item.Intersection = event.Interseccion
+				item.QueueLength = event.Volumen
+				item.AvgSpeed = event.VelocidadPromedio
+				v.state[event.Interseccion] = item
+			}
+		case model.TopicGPS:
+			var event model.GPSEvent
+			if json.Unmarshal(payload, &event) == nil {
+				item := v.state[event.Interseccion]
+				item.Intersection = event.Interseccion
+				item.Density = event.Densidad
+				item.AvgSpeed = event.VelocidadPromedio
+				v.state[event.Interseccion] = item
+			}
+		case model.TopicInductive:
+			var event model.InductiveEvent
+			if json.Unmarshal(payload, &event) == nil {
+				item := v.state[event.Interseccion]
+				item.Intersection = event.Interseccion
+				item.VehiclesCounted = event.VehiculosContados
+				v.state[event.Interseccion] = item
 			}
 		}
 		v.broadcast(payload, topic)
 		v.mu.Unlock()
+	}
+}
+
+// consumeLightCommands recibe LightCommand desde analytics para actualizar semáforos
+func (v *visualizer) consumeLightCommands() {
+	pull := zmq4.NewPull(context.Background())
+	defer pull.Close()
+
+	if err := pull.Listen(v.cfg.Endpoints.VisualizerLightPush); err != nil {
+		log.Fatalf("visualizer listen light push: %v", err)
+	}
+
+	for {
+		msg, err := pull.Recv()
+		if err != nil {
+			log.Printf("visualizer recv light command: %v", err)
+			return
+		}
+		if len(msg.Frames) == 0 {
+			continue
+		}
+
+		var cmd model.LightCommand
+		if err := json.Unmarshal(msg.Frames[0], &cmd); err != nil {
+			log.Printf("visualizer unmarshal light command: %v", err)
+			continue
+		}
+
+		v.mu.Lock()
+		item := v.state[cmd.Intersection]
+		item.Intersection = cmd.Intersection
+		item.LightState = cmd.TargetState
+		v.state[cmd.Intersection] = item
+		
+		// Enviar actualizaciones a clientes SSE
+		envelope := map[string]any{
+			"topic":        "light_command",
+			"light_command": cmd,
+		}
+		data, _ := json.Marshal(envelope)
+		v.broadcast(data, "light_command")
+		v.mu.Unlock()
+
+		log.Printf("[visualizer] actualizado %s => %s", cmd.Intersection, cmd.TargetState)
 	}
 }
 
@@ -118,9 +178,12 @@ func (v *visualizer) handleState(w http.ResponseWriter, _ *http.Request) {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
+	// Crear slice ordenado por fila y columna usando config
 	list := make([]model.IntersectionSnapshot, 0, len(v.state))
-	for _, item := range v.state {
-		list = append(list, item)
+	for _, intConfig := range v.cfg.Intersections {
+		if snapshot, ok := v.state[intConfig.ID]; ok {
+			list = append(list, snapshot)
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -163,24 +226,31 @@ func (v *visualizer) handleEvents(w http.ResponseWriter, r *http.Request) {
 
 func (v *visualizer) broadcast(payload []byte, topic string) {
 	envelope := map[string]any{"topic": topic}
-	if topic == model.TopicSnapshot {
-		var env model.PersistEnvelope
-		if json.Unmarshal(payload, &env) == nil {
-			envelope["snapshot"] = env.Snapshot
+	
+	// Manejar eventos de sensores
+	switch topic {
+	case model.TopicCamera:
+		var event model.CameraEvent
+		if json.Unmarshal(payload, &event) == nil {
+			envelope["camera_event"] = event
 		}
-	}
-	if topic == model.TopicCommand {
+	case model.TopicGPS:
+		var event model.GPSEvent
+		if json.Unmarshal(payload, &event) == nil {
+			envelope["gps_event"] = event
+		}
+	case model.TopicInductive:
+		var event model.InductiveEvent
+		if json.Unmarshal(payload, &event) == nil {
+			envelope["inductive_event"] = event
+		}
+	case "light_command":
 		var cmd model.LightCommand
 		if json.Unmarshal(payload, &cmd) == nil {
 			envelope["light_command"] = cmd
 		}
 	}
-	if topic == model.TopicLightState {
-		var event model.LightStateEvent
-		if json.Unmarshal(payload, &event) == nil {
-			envelope["light_state"] = event
-		}
-	}
+	
 	data, _ := json.Marshal(envelope)
 	for ch := range v.subs {
 		select {
