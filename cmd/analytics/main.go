@@ -325,7 +325,15 @@ func (a *analyticsApp) handleExecutedLightCommands(pullExecuted, pushPrimary, pu
 			LightCommand: &cmd,
 			CreatedAt:    *cmd.ChangedAt,
 		}
+
+		snpshot := &model.IntersectionSnapshot{
+			Intersection: cmd.Intersection,
+			LightState:  cmd.TargetState,
+			UpdatedAt:   *cmd.ChangedAt,
+		}
+		env.Snapshot = snpshot
 		a.persistEnvelope(env, pushPrimary, pushReplica)
+		a.persistSnapshot(*snpshot, "solved.state", data, pushPrimary, pushReplica)
 	}
 }
 
@@ -390,7 +398,7 @@ func (a *analyticsApp) processSensor(topic string, payload []byte, pushLights, p
 
 	if command != nil && latest.HasSemaphore {
 		log.Printf("[analytics] %s => %s (%s)", latest.Intersection, command.TargetState, command.Reason)
-		a.sendLightCommand(*command, pushLights, pushPrimary, pushReplica)
+		a.sendLightCommand(*command, pushLights)
 	}
 }
 
@@ -438,12 +446,12 @@ func (a *analyticsApp) handleRequest(req model.MonitorRequest, pushLights, pushP
 			return model.MonitorResponse{Success: false, Message: err.Error()}
 		}
 		log.Printf("[analytics] force_green %s -> %s por %ds", cmd.Intersection, cmd.TargetState, cmd.DurationSec)
-		a.sendLightCommand(cmd, pushLights, pushPrimary, pushReplica)
+		a.sendLightCommand(cmd, pushLights)
 		return model.MonitorResponse{Success: true, Message: "force_green aplicado", Data: cmd}
 	case "force_green_wave":
 		commands := a.evaluator.BuildPriorityWave(req.Route, a.city)
 		for _, cmd := range commands {
-			a.sendLightCommand(cmd, pushLights, pushPrimary, pushReplica)
+			a.sendLightCommand(cmd, pushLights)
 		}
 		return model.MonitorResponse{Success: true, Message: "ola verde aplicada", Data: commands}
 	case "restore_automatic":
@@ -462,14 +470,14 @@ func (a *analyticsApp) handleRequest(req model.MonitorRequest, pushLights, pushP
 			RequestedAt:  storage.NowStoreTime(),
 		}
 		log.Printf("[analytics] restore_automatic %s -> %s por %ds", cmd.Intersection, cmd.TargetState, cmd.DurationSec)
-		a.sendLightCommand(cmd, pushLights, pushPrimary, pushReplica)
+		a.sendLightCommand(cmd, pushLights)
 		return model.MonitorResponse{Success: true, Message: "modo automatico restaurado", Data: cmd}
 	default:
 		return model.MonitorResponse{Success: false, Message: "accion no soportada"}
 	}
 }
 
-func (a *analyticsApp) sendLightCommand(cmd model.LightCommand, pushLights, pushPrimary, pushReplica zmq4.Socket) {
+func (a *analyticsApp) sendLightCommand(cmd model.LightCommand, pushLights zmq4.Socket) {
 	// Asignar RequestedAt y dejar ChangedAt vacío
 	cmd.RequestedAt = storage.NowStoreTime()
 	cmd.ChangedAt = nil
