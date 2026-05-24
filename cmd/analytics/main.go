@@ -75,6 +75,7 @@ func (a *analyticsApp) run() error {
 		return err
 	}
 
+	// Socket REP para recibir solicitudes de monitoreo
 	rep := zmq4.NewRep(ctx)
 	if err := rep.Listen(a.cfg.Endpoints.AnalyticsREP); err != nil {
 		return err
@@ -306,8 +307,11 @@ func (a *analyticsApp) handleExecutedLightCommands(pullExecuted, pushPrimary, pu
 			continue
 		}
 
-		log.Printf("[analytics] recibido comando ejecutado: %s (requested=%v, changed=%v)", 
+		log.Printf("[analytics] recibido comando ejecutado: %s (requested=%v, changed=%v)",
 			cmd.CommandID, cmd.RequestedAt, cmd.ChangedAt)
+
+		/* AQUÍ DEBERÍA CAMBIAR EL OBJETO DE CIUDAD PARA REFLEJAR EL CAMBIO DE ESTADO */
+		a.city.SetLight(cmd.Intersection, cmd.TargetState)
 
 		// Persistir comando ejecutado
 		data, _ := json.Marshal(cmd)
@@ -387,6 +391,7 @@ func (a *analyticsApp) processSensor(topic string, payload []byte, pushLights, p
 	}
 }
 
+/* Función para escuchar solicitudes de monitoreo */
 func (a *analyticsApp) handleRequests(rep, pushLights, pushPrimary, pushReplica zmq4.Socket) {
 	for {
 		msg, err := rep.Recv()
@@ -412,6 +417,7 @@ func (a *analyticsApp) handleRequests(rep, pushLights, pushPrimary, pushReplica 
 	}
 }
 
+/* Función para ejecutar solicitudes de monitoreo */
 func (a *analyticsApp) handleRequest(req model.MonitorRequest, pushLights, pushPrimary, pushReplica zmq4.Socket) model.MonitorResponse {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -450,9 +456,6 @@ func (a *analyticsApp) sendLightCommand(cmd model.LightCommand, pushLights, push
 
 	data, _ := json.Marshal(cmd)
 	_ = pushLights.Send(zmq4.NewMsg(data))
-
-	// NO persistir aquí - la persistencia ocurre cuando traffic-light devuelve el comando ejecutado
-	// con ChangedAt asignado
 }
 
 func (a *analyticsApp) persistSnapshot(snapshot model.IntersectionSnapshot, topic string, raw []byte, pushPrimary, pushReplica zmq4.Socket) {
