@@ -9,6 +9,12 @@ import (
 	"proy-distri/internal/model"
 )
 
+var analyticsTimeZone = time.FixedZone("UTC-5", -5*60*60)
+
+func nowAnalyticsTime() time.Time {
+	return time.Now().In(analyticsTimeZone)
+}
+
 const (
 	StatusNormal      = "NORMAL"
 	StatusCongestion  = "CONGESTION"
@@ -40,7 +46,7 @@ func (e Evaluator) Evaluate(snapshot model.IntersectionSnapshot) (string, *model
 			DurationSec:  duration,
 			Reason:       ReasonCongestion,
 			RequestedBy:  RequestAnalytics,
-			RequestedAt:  time.Now().UTC(),
+			RequestedAt:  nowAnalyticsTime(),
 		}
 	case snapshot.QueueLength < 5 && snapshot.AvgSpeed > 35 && snapshot.Density < 20 && snapshot.HasSemaphore:
 		targetPhase := model.PreferredPhaseForIntersectionID(snapshot.Intersection)
@@ -51,7 +57,7 @@ func (e Evaluator) Evaluate(snapshot model.IntersectionSnapshot) (string, *model
 			DurationSec:  e.cfg.BaseGreenSeconds,
 			Reason:       ReasonNormal,
 			RequestedBy:  RequestAnalytics,
-			RequestedAt:  time.Now().UTC(),
+			RequestedAt:  nowAnalyticsTime(),
 		}
 	default:
 		return StatusNormal, nil

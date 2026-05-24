@@ -80,9 +80,9 @@ func runCLIMonitor(cfg config.CityConfig) {
 			Intersection: *intersection,
 			Route:        *route,
 			DurationSec:  *duration,
-			From:         time.Now().UTC().Add(-2 * time.Minute),
-			To:           time.Now().UTC(),
-			RequestedAt:  time.Now().UTC(),
+			From:         storage.NowStoreTime().Add(-2 * time.Minute),
+			To:           storage.NowStoreTime(),
+			RequestedAt:  storage.NowStoreTime(),
 		}
 		executeMonitorRequest("[monitor]", &router, analyticsReq, req)
 	}
@@ -125,9 +125,9 @@ func parseConsoleCommand(line string) (model.MonitorRequest, bool, bool) {
 
 	req := model.MonitorRequest{
 		Action:      action,
-		From:        time.Now().UTC().Add(-2 * time.Minute),
-		To:          time.Now().UTC(),
-		RequestedAt: time.Now().UTC(),
+		From:        storage.NowStoreTime().Add(-2 * time.Minute),
+		To:          storage.NowStoreTime(),
+		RequestedAt: storage.NowStoreTime(),
 	}
 
 	switch action {
@@ -254,7 +254,7 @@ func (c dbClient) QueryCurrent(intersection string) ([]byte, error) {
 	req := model.MonitorRequest{
 		Action:       "current",
 		Intersection: intersection,
-		RequestedAt:  time.Now().UTC(),
+		RequestedAt:  storage.NowStoreTime(),
 	}
 	return c.send(req)
 }

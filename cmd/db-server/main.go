@@ -101,7 +101,7 @@ func handleQuery(store *storage.Store, req model.MonitorRequest) model.MonitorRe
 	switch strings.ToLower(req.Action) {
 	case "health":
 		// Health check endpoint para detectar disponibilidad del DB server
-		return model.MonitorResponse{Success: true, Message: "db_primary_healthy", Data: map[string]any{"timestamp": time.Now().UTC()}}
+		return model.MonitorResponse{Success: true, Message: "db_primary_healthy", Data: map[string]any{"timestamp": storage.NowStoreTime()}}
 	case "current":
 		data, err := store.QueryCurrent(req.Intersection)
 		if err != nil {
@@ -110,10 +110,10 @@ func handleQuery(store *storage.Store, req model.MonitorRequest) model.MonitorRe
 		return model.MonitorResponse{Success: true, Message: "consulta puntual", Data: data}
 	case "history":
 		if req.From.IsZero() {
-			req.From = time.Now().UTC().Add(-2 * time.Minute)
+			req.From = storage.NowStoreTime().Add(-2 * time.Minute)
 		}
 		if req.To.IsZero() {
-			req.To = time.Now().UTC()
+			req.To = storage.NowStoreTime()
 		}
 		data, err := store.QueryHistory(req.From, req.To)
 		if err != nil {
@@ -122,10 +122,10 @@ func handleQuery(store *storage.Store, req model.MonitorRequest) model.MonitorRe
 		return model.MonitorResponse{Success: true, Message: "consulta historica", Data: data}
 	case "metric_count":
 		if req.From.IsZero() {
-			req.From = time.Now().UTC().Add(-2 * time.Minute)
+			req.From = storage.NowStoreTime().Add(-2 * time.Minute)
 		}
 		if req.To.IsZero() {
-			req.To = time.Now().UTC()
+			req.To = storage.NowStoreTime()
 		}
 		count, err := store.CountBetween(req.From, req.To)
 		if err != nil {

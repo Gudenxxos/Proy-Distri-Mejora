@@ -16,7 +16,6 @@
     "db_replica_pull": "tcp://10.43.97.128:7004",
     "db_primary_rep": "tcp://10.43.100.132:7005",
     "db_replica_rep": "tcp://10.43.97.128:7006",
-    "monitor_auxiliar": "tcp://10.43.97.128:7007",
     "visualizer_http": ":8080"
   },
   "intersections": [

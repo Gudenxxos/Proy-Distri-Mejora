@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/go-zeromq/zmq4"
@@ -16,6 +17,7 @@ import (
 	analyticslogic "proy-distri/internal/analytics"
 	"proy-distri/internal/config"
 	"proy-distri/internal/model"
+	"proy-distri/internal/storage"
 )
 
 func main() {
@@ -143,7 +145,7 @@ func (a *analyticsApp) healthCheckLoop(ctx context.Context) {
 
 		healthReq := model.MonitorRequest{
 			Action:      "health",
-			RequestedAt: time.Now().UTC(),
+			RequestedAt: storage.NowStoreTime(),
 		}
 		data, _ := json.Marshal(healthReq)
 
@@ -213,18 +215,20 @@ func (a *analyticsApp) startAuxMonitor() {
 	var cmd *exec.Cmd
 
 	if runtime.GOOS == "windows" {
-		// Windows: abrir una terminal nueva y definir AUX dentro de esa terminal.
+		// Windows: Lanzar PowerShell en una terminal separada (CREATE_NEW_CONSOLE)
+		// para poder capturar y terminar el proceso
 		cmd = exec.Command(
-			"cmd.exe",
-			"/c",
-			"start",
-			"Monitor Auxiliar",
 			"powershell.exe",
 			"-NoProfile",
 			"-NoExit",
 			"-Command",
 			`$env:AUX='true'; $env:CITY_CONFIG='configs\city.json'; & '.\monitor.exe'`,
 		)
+		// Crear una nueva consola para que se abra en ventana separada
+		// CREATE_NEW_CONSOLE = 0x00000100 en Windows
+		cmd.SysProcAttr = &syscall.SysProcAttr{
+			CreationFlags: 0x00000100,
+		}
 	} else {
 		// Linux/macOS: Lanzar en segundo plano con AUX=true
 		cmd = exec.Command(
@@ -239,13 +243,8 @@ func (a *analyticsApp) startAuxMonitor() {
 		return
 	}
 
-	if runtime.GOOS == "windows" {
-		log.Printf("[analytics] Monitor Auxiliar lanzado en terminal separada")
-		return
-	}
-
 	a.auxMonitorCmd = cmd.Process
-	log.Printf("[analytics] Monitor Auxiliar iniciado (PID: %d)", a.auxMonitorCmd.Pid)
+	log.Printf("[analytics] Monitor Auxiliar iniciado (PID: %d) en ventana separada", a.auxMonitorCmd.Pid)
 
 	// Monitorear el proceso en segundo plano
 	go func() {
@@ -261,7 +260,7 @@ func (a *analyticsApp) startAuxMonitor() {
 	}()
 }
 
-// stopAuxMonitor termina el proceso del monitor auxiliar
+// stopAuxMonitor termina el proceso del monitor auxiliar y cierra su ventana
 func (a *analyticsApp) stopAuxMonitor() {
 	a.auxMonitorMutex.Lock()
 	defer a.auxMonitorMutex.Unlock()
@@ -270,11 +269,14 @@ func (a *analyticsApp) stopAuxMonitor() {
 		return
 	}
 
-	log.Printf("[analytics] Terminando Monitor Auxiliar (PID: %d)...", a.auxMonitorCmd.Pid)
+	log.Printf("[analytics] Terminando Monitor Auxiliar (PID: %d) y cerrando su ventana...", a.auxMonitorCmd.Pid)
 	if err := a.auxMonitorCmd.Kill(); err != nil {
 		log.Printf("[analytics] Error terminando Monitor Auxiliar: %v", err)
+		return
 	}
-	a.auxMonitorCmd = nil
+	
+	// El auxMonitorCmd se pondrá a nil cuando cmd.Wait() retorne en el goroutine
+	// No lo marcamos como nil aquí para evitar race conditions
 }
 
 // IsPC3Healthy retorna el estado actual del DB primario de manera thread-safe.
@@ -384,7 +386,7 @@ func (a *analyticsApp) handleRequest(req model.MonitorRequest, pushLights, pushP
 			DurationSec:  req.DurationSec,
 			Reason:       analyticslogic.ReasonPriority,
 			RequestedBy:  analyticslogic.RequestMonitoring,
-			RequestedAt:  time.Now().UTC(),
+			RequestedAt:  storage.NowStoreTime(),
 		}
 		a.sendLightCommand(cmd, pushLights, pushPrimary, pushReplica, pub)
 		return model.MonitorResponse{Success: true, Message: "force_green aplicado", Data: cmd}
@@ -403,7 +405,7 @@ func (a *analyticsApp) handleRequest(req model.MonitorRequest, pushLights, pushP
 			DurationSec:  a.cfg.BaseGreenSeconds,
 			Reason:       analyticslogic.ReasonNormal,
 			RequestedBy:  analyticslogic.RequestMonitoring,
-			RequestedAt:  time.Now().UTC(),
+			RequestedAt:  storage.NowStoreTime(),
 		}
 		a.sendLightCommand(cmd, pushLights, pushPrimary, pushReplica, pub)
 		return model.MonitorResponse{Success: true, Message: "modo automatico restaurado", Data: cmd}
@@ -422,7 +424,7 @@ func (a *analyticsApp) sendLightCommand(cmd model.LightCommand, pushLights, push
 		Topic:        model.TopicCommand,
 		RawPayload:   string(data),
 		LightCommand: &cmd,
-		CreatedAt:    time.Now().UTC(),
+		CreatedAt:    storage.NowStoreTime(),
 	}
 	a.persistEnvelope(env, pushPrimary, pushReplica)
 }
@@ -433,7 +435,7 @@ func (a *analyticsApp) persistSnapshot(snapshot model.IntersectionSnapshot, topi
 		Topic:      topic,
 		RawPayload: string(raw),
 		Snapshot:   &snapshot,
-		CreatedAt:  time.Now().UTC(),
+		CreatedAt:  storage.NowStoreTime(),
 	}
 	a.persistEnvelope(env, pushPrimary, pushReplica)
 }
@@ -443,7 +445,7 @@ func (a *analyticsApp) publishSnapshot(snapshot model.IntersectionSnapshot, pub 
 		Kind:      "snapshot",
 		Topic:     model.TopicSnapshot,
 		Snapshot:  &snapshot,
-		CreatedAt: time.Now().UTC(),
+		CreatedAt: storage.NowStoreTime(),
 	})
 	_ = pub.Send(zmq4.NewMsgFrom([]byte(model.TopicSnapshot), data))
 }
@@ -469,7 +471,7 @@ func (a *analyticsApp) persistEnvelope(env model.PersistEnvelope, pushPrimary, p
 }
 
 func commandID() string {
-	return "cmd-" + time.Now().UTC().Format("20060102150405.000000000")
+	return "cmd-" + storage.NowStoreTime().Format("20060102150405.000000000")
 }
 
 func getenv(key, fallback string) string {

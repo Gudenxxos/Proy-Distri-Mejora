@@ -17,6 +17,11 @@ type Store struct {
 
 var storeTimeZone = time.FixedZone("UTC-5", -5*60*60)
 
+// NowStoreTime retorna la hora actual en UTC-5
+func NowStoreTime() time.Time {
+	return time.Now().In(storeTimeZone)
+}
+
 func toStoreTime(value time.Time) string {
 	return value.In(storeTimeZone).Format(time.RFC3339)
 }

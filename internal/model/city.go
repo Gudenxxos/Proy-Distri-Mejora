@@ -9,6 +9,12 @@ import (
 	"proy-distri/internal/config"
 )
 
+var modelTimeZone = time.FixedZone("UTC-5", -5*60*60)
+
+func nowModelTime() time.Time {
+	return time.Now().In(modelTimeZone)
+}
+
 type IntersectionState struct {
 	ID             string
 	Row            string
@@ -56,7 +62,7 @@ func NewCity(cfg config.CityConfig) *City {
 			Upstream:     item.Upstream,
 			LightState:   light,
 			Status:       "NORMAL",
-			LastUpdate:   time.Now().UTC(),
+			LastUpdate:   nowModelTime(),
 		}
 	}
 
@@ -76,7 +82,7 @@ func (c *City) UpdateFromCamera(intersection string, volume int, speed float64) 
 
 	item.QueueLength = volume
 	item.AvgSpeed = speed
-	item.LastUpdate = time.Now().UTC()
+	item.LastUpdate = nowModelTime()
 
 	return c.snapshot(item), nil
 }
@@ -89,7 +95,7 @@ func (c *City) UpdateFromGPS(intersection string, density, speed float64) (*Inte
 
 	item.Density = density
 	item.AvgSpeed = speed
-	item.LastUpdate = time.Now().UTC()
+	item.LastUpdate = nowModelTime()
 
 	return c.snapshot(item), nil
 }
@@ -102,7 +108,7 @@ func (c *City) UpdateFromInductive(intersection string, counted int) (*Intersect
 
 	item.VehiclesCount = counted
 	item.QueueLength = int(math.Max(0, float64(item.QueueLength-counted)))
-	item.LastUpdate = time.Now().UTC()
+	item.LastUpdate = nowModelTime()
 
 	return c.snapshot(item), nil
 }
@@ -150,8 +156,7 @@ func (c *City) SetLight(intersection, state string) (*IntersectionSnapshot, erro
 	}
 
 	item.LightState = phase
-	item.LastTransition = time.Now().UTC()
-	item.LastUpdate = item.LastTransition
+	item.LastTransition = nowModelTime()
 
 	return c.snapshot(item), nil
 }
@@ -163,8 +168,7 @@ func (c *City) SetStatus(intersection, status string) (*IntersectionSnapshot, er
 	}
 
 	item.Status = strings.ToUpper(status)
-	item.LastUpdate = time.Now().UTC()
-
+	item.LastUpdate = nowModelTime()
 	return c.snapshot(item), nil
 }
 
