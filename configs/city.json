@@ -150,5 +150,24 @@
       "monitored": false
     }
   ],
-  "sensor_profiles": []
+  "sensor_profiles": [
+    {
+      "sensor_id": "CAM-A3",
+      "sensor_type": "camara",
+      "intersection": "INT_A3",
+      "interval_seconds": 10
+    },
+    {
+      "sensor_id": "GPS-B2",
+      "sensor_type": "gps",
+      "intersection": "INT_B2",
+      "interval_seconds": 10
+    },
+    {
+      "sensor_id": "ESP-C3",
+      "sensor_type": "espira_inductiva",
+      "intersection": "INT_C3",
+      "interval_seconds": 10
+    }
+  ]
 }
