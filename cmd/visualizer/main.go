@@ -136,10 +136,20 @@ func (v *visualizer) consumeBroker() {
 			}
 		}
 		if updated != nil {
+			item := v.state[updated.Intersection]
+			item.Status = v.statusCalculatedFromData(item)
+			v.state[updated.Intersection] = item
 			v.broadcastSnapshot(*updated, topic)
 		}
 		v.mu.Unlock()
 	}
+}
+
+func (v *visualizer) statusCalculatedFromData(item model.IntersectionSnapshot) string {
+	if item.QueueLength >= 8 || item.AvgSpeed < 20 || item.Density >= 35 {
+		return "CONGESTION"
+	}
+	return "NORMAL"
 }
 
 // consumeLightCommands recibe LightCommand desde analytics para actualizar semáforos
