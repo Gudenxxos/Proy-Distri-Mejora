@@ -56,7 +56,7 @@ func main() {
 	// Inicializar estados de todos los semáforos
 	for _, intersection := range cfg.Intersections {
 		if intersection.HasSemaphore {
-			app.states[intersection.ID] = model.LightPhaseNone
+			app.states[intersection.ID] = model.LightPhaseHorizontal
 		}
 	}
 

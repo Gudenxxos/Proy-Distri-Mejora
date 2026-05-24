@@ -55,34 +55,34 @@ func (e Evaluator) Evaluate(snapshot model.IntersectionSnapshot) (string, *model
 			RequestedBy:  RequestAnalytics,
 			RequestedAt:  nowAnalyticsTime(),
 		}
-	case snapshot.QueueLength < 5 && snapshot.AvgSpeed > 35 && snapshot.Density < 20 && snapshot.HasSemaphore:
+	/* case snapshot.QueueLength < 5 && snapshot.AvgSpeed > 35 && snapshot.Density < 20 && snapshot.HasSemaphore:
 		duration := e.cfg.BaseGreenSeconds
 		return StatusNormal, &model.LightCommand{
 			CommandID:    fmt.Sprintf("cmd-%d", time.Now().UnixNano()),
 			Intersection: snapshot.Intersection,
-			TargetState:  StatusNormal,
+			TargetState:  e.determinePhaseForIntersection(snapshot.Intersection, snapshot.LightState),
 			DurationSec:  duration,
 			Reason:       ReasonNormal,
 			RequestedBy:  RequestAnalytics,
 			RequestedAt:  nowAnalyticsTime(),
-		}
+		} */
 	default:
 		return StatusNormal, nil
 	}
 }
 
 // determinePhaseForIntersection determines the light phase based on row/column priority.
-// According to requirements: if intersection is B3, row B wins (horizontal).
 func (e Evaluator) determinePhaseForIntersection(intersectionID string, currentPhase string) string {
 // Si el estado actual es HORIZONTAL, return VERTICAL
 	// Si el estado actual es VERTICAL, return HORIZONTAL
-	// Si el estado actual es NONE o desconocido, determinar por la interseccion
-	if currentPhase == model.LightPhaseHorizontal {
+	switch currentPhase {
+	case model.LightPhaseHorizontal:
 		return model.LightPhaseVertical
-	} else if currentPhase == model.LightPhaseVertical {
+	case model.LightPhaseVertical:
+		return model.LightPhaseHorizontal
+	default:
 		return model.LightPhaseHorizontal
 	}
-	return model.LightPhaseHorizontal
 }
 	
 	
