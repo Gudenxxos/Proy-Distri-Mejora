@@ -12,6 +12,7 @@
     "broker_fanout": "tcp://10.43.100.155:6002",
     "analytics_rep": "tcp://10.43.97.128:7001",
     "traffic_light_pull": "tcp://10.43.97.128:7002",
+    "traffic_light_executed_push": "tcp://10.43.97.128:7008",
     "db_primary_pull": "tcp://10.43.100.132:7003",
     "db_replica_pull": "tcp://10.43.97.128:7004",
     "db_primary_rep": "tcp://10.43.100.132:7005",

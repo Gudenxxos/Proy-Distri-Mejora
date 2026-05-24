@@ -85,6 +85,12 @@ func (a *analyticsApp) run() error {
 		return err
 	}
 
+	// Socket PULL para recibir comandos ejecutados desde traffic-light
+	pullExecutedLights := zmq4.NewPull(ctx)
+	if err := pullExecutedLights.Listen(a.cfg.Endpoints.TrafficLightExecutedPush); err != nil {
+		return err
+	}
+
 	// Socket REQ para health check con timeout configurado
 	healthCheckReq := zmq4.NewReq(
 		ctx,
@@ -104,6 +110,9 @@ func (a *analyticsApp) run() error {
 	go a.healthCheckLoop(ctx)
 
 	go a.handleRequests(rep, pushLights, pushPrimary, pushReplica, pub)
+
+	// Goroutine para recibir y persistir comandos ejecutados desde traffic-light
+	go a.handleExecutedLightCommands(pullExecutedLights, pushPrimary, pushReplica)
 
 	for {
 		msg, err := sub.Recv()
@@ -278,6 +287,46 @@ func (a *analyticsApp) stopAuxMonitor() {
 	a.auxMonitorCmd = nil
 }
 
+// handleExecutedLightCommands escucha comandos ejecutados desde traffic-light
+// y los persiste en las bases de datos primary y replica
+func (a *analyticsApp) handleExecutedLightCommands(pullExecuted, pushPrimary, pushReplica zmq4.Socket) {
+	for {
+		msg, err := pullExecuted.Recv()
+		if err != nil {
+			log.Printf("[analytics] error recibiendo comando ejecutado: %v", err)
+			continue
+		}
+		if len(msg.Frames) == 0 {
+			continue
+		}
+
+		var cmd model.LightCommand
+		if err := json.Unmarshal(msg.Frames[0], &cmd); err != nil {
+			log.Printf("[analytics] error decodificando comando ejecutado: %v", err)
+			continue
+		}
+
+		if cmd.ChangedAt == nil {
+			log.Printf("[analytics] comando ejecutado sin ChangedAt: %s", cmd.CommandID)
+			continue
+		}
+
+		log.Printf("[analytics] recibido comando ejecutado: %s (requested=%v, changed=%v)", 
+			cmd.CommandID, cmd.RequestedAt, cmd.ChangedAt)
+
+		// Persistir comando ejecutado
+		data, _ := json.Marshal(cmd)
+		env := model.PersistEnvelope{
+			Kind:         "light_command_executed",
+			Topic:        model.TopicCommand,
+			RawPayload:   string(data),
+			LightCommand: &cmd,
+			CreatedAt:    *cmd.ChangedAt,
+		}
+		a.persistEnvelope(env, pushPrimary, pushReplica)
+	}
+}
+
 // IsPC3Healthy retorna el estado actual del DB primario de manera thread-safe.
 func (a *analyticsApp) IsPC3Healthy() bool {
 	a.pc3HealthMutex.RLock()
@@ -414,18 +463,16 @@ func (a *analyticsApp) handleRequest(req model.MonitorRequest, pushLights, pushP
 }
 
 func (a *analyticsApp) sendLightCommand(cmd model.LightCommand, pushLights, pushPrimary, pushReplica, pub zmq4.Socket) {
+	// Asignar RequestedAt y dejar ChangedAt vacío
+	cmd.RequestedAt = storage.NowStoreTime()
+	cmd.ChangedAt = nil
+
 	data, _ := json.Marshal(cmd)
 	_ = pushLights.Send(zmq4.NewMsg(data))
 	_ = pub.Send(zmq4.NewMsgFrom([]byte(model.TopicCommand), data))
 
-	env := model.PersistEnvelope{
-		Kind:         "light_command",
-		Topic:        model.TopicCommand,
-		RawPayload:   string(data),
-		LightCommand: &cmd,
-		CreatedAt:    storage.NowStoreTime(),
-	}
-	a.persistEnvelope(env, pushPrimary, pushReplica)
+	// NO persistir aquí - la persistencia ocurre cuando traffic-light devuelve el comando ejecutado
+	// con ChangedAt asignado
 }
 
 func (a *analyticsApp) persistSnapshot(snapshot model.IntersectionSnapshot, topic string, raw []byte, pushPrimary, pushReplica zmq4.Socket) {

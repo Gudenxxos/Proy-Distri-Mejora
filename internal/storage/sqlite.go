@@ -133,6 +133,11 @@ func (s *Store) InsertEnvelope(env model.PersistEnvelope) error {
 	}
 
 	if env.LightCommand != nil {
+		var changedAtStr *string
+		if env.LightCommand.ChangedAt != nil {
+			t := toStoreTime(*env.LightCommand.ChangedAt)
+			changedAtStr = &t
+		}
 		_, err = s.db.Exec(
 			`INSERT INTO light_actions
 			(command_id, intersection, target_state, duration_sec, reason, requested_by, requested_at, changed_at)
@@ -144,7 +149,7 @@ func (s *Store) InsertEnvelope(env model.PersistEnvelope) error {
 			env.LightCommand.Reason,
 			env.LightCommand.RequestedBy,
 			toStoreTime(env.LightCommand.RequestedAt),
-			nil,
+			changedAtStr,
 		)
 	}
 

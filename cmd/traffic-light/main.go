@@ -12,6 +12,7 @@ import (
 
 	"proy-distri/internal/config"
 	"proy-distri/internal/model"
+	"proy-distri/internal/storage"
 )
 
 func main() {
@@ -34,16 +35,11 @@ func main() {
 		log.Fatalf("dial broker ingest: %v", err)
 	}
 
-	pushPrimary := zmq4.NewPush(ctx)
-	defer pushPrimary.Close()
-	if err := pushPrimary.Dial(cfg.Endpoints.DBPrimaryPull); err != nil {
-		log.Fatalf("dial primary db push: %v", err)
-	}
-
-	pushReplica := zmq4.NewPush(ctx)
-	defer pushReplica.Close()
-	if err := pushReplica.Dial(cfg.Endpoints.DBReplicaPull); err != nil {
-		log.Fatalf("dial replica db push: %v", err)
+	// PUSH para enviar comandos ejecutados de vuelta a analytics
+	pushExecuted := zmq4.NewPush(ctx)
+	defer pushExecuted.Close()
+	if err := pushExecuted.Dial(cfg.Endpoints.TrafficLightExecutedPush); err != nil {
+		log.Fatalf("dial traffic light executed push: %v", err)
 	}
 
 	states := make(map[string]string)
@@ -76,18 +72,28 @@ func main() {
 		timers[cmd.Intersection] = stopCh
 		mu.Unlock()
 
+		// Asignar ChangedAt y enviar comando ejecutado a analytics
+		now := storage.NowStoreTime()
+		cmd.ChangedAt = &now
+		
+		// Publicar evento en broker
 		event := model.LightStateEvent{
 			CommandID:    cmd.CommandID,
 			Intersection: cmd.Intersection,
 			LightState:   cmd.TargetState,
 			Reason:       cmd.Reason,
-			ChangedAt:    time.Now().UTC(),
+			ChangedAt:    now,
 		}
+		eventData, _ := json.Marshal(event)
+		_ = pub.Send(zmq4.NewMsgFrom([]byte(model.TopicLightState), eventData))
 
-		persistAndPublish(event, pub, pushPrimary, pushReplica)
+		// Enviar comando ejecutado a analytics para persistencia
+		cmdData, _ := json.Marshal(cmd)
+		_ = pushExecuted.Send(zmq4.NewMsg(cmdData))
+		
 		log.Printf("[traffic-light] %s -> %s por %s durante %ds", cmd.Intersection, cmd.TargetState, cmd.Reason, cmd.DurationSec)
 
-		go func(command model.LightCommand, stopCh chan struct{}) {
+		go func(command model.LightCommand, stopCh chan struct{}, pushEx zmq4.Socket) {
 			timer := time.NewTimer(time.Duration(command.DurationSec) * time.Second)
 			defer timer.Stop()
 
@@ -102,33 +108,22 @@ func main() {
 			states[command.Intersection] = nextPhase
 			mu.Unlock()
 
+			now := storage.NowStoreTime()
 			event := model.LightStateEvent{
 				CommandID:    command.CommandID,
 				Intersection: command.Intersection,
 				LightState:   nextPhase,
 				Reason:       "cycle_end",
-				ChangedAt:    time.Now().UTC(),
+				ChangedAt:    now,
 			}
-			persistAndPublish(event, pub, pushPrimary, pushReplica)
+			
+			// Solo publicar, no persistir aquí
+			eventData, _ := json.Marshal(event)
+			_ = pub.Send(zmq4.NewMsgFrom([]byte(model.TopicLightState), eventData))
+			
 			log.Printf("[traffic-light] %s cambia a %s al terminar el ciclo", command.Intersection, nextPhase)
-		}(cmd, stopCh)
+		}(cmd, stopCh, pushExecuted)
 	}
-}
-
-func persistAndPublish(event model.LightStateEvent, pub, pushPrimary, pushReplica zmq4.Socket) {
-	data, _ := json.Marshal(event)
-	_ = pub.Send(zmq4.NewMsgFrom([]byte(model.TopicLightState), data))
-
-	env := model.PersistEnvelope{
-		Kind:       "light_state",
-		Topic:      model.TopicLightState,
-		RawPayload: string(data),
-		LightState: &event,
-		CreatedAt:  event.ChangedAt,
-	}
-	bytes, _ := json.Marshal(env)
-	_ = pushPrimary.Send(zmq4.NewMsg(bytes))
-	_ = pushReplica.Send(zmq4.NewMsg(bytes))
 }
 
 func getenv(key, fallback string) string {

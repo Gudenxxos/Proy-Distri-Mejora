@@ -60,14 +60,15 @@ type IntersectionSnapshot struct {
 }
 
 type LightCommand struct {
-	CommandID     string    `json:"command_id"`
-	Intersection  string    `json:"intersection"`
-	TargetState   string    `json:"target_state"`
-	DurationSec   int       `json:"duration_sec"`
-	Reason        string    `json:"reason"`
-	RequestedBy   string    `json:"requested_by"`
-	RequestedAt   time.Time `json:"requested_at"`
-	PriorityRoute string    `json:"priority_route,omitempty"`
+	CommandID     string     `json:"command_id"`
+	Intersection  string     `json:"intersection"`
+	TargetState   string     `json:"target_state"`
+	DurationSec   int        `json:"duration_sec"`
+	Reason        string     `json:"reason"`
+	RequestedBy   string     `json:"requested_by"`
+	RequestedAt   time.Time  `json:"requested_at"`
+	ChangedAt     *time.Time `json:"changed_at,omitempty"` // Asignado por traffic-light cuando ejecuta el comando
+	PriorityRoute string     `json:"priority_route,omitempty"`
 }
 
 type LightStateEvent struct {

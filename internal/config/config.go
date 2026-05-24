@@ -6,15 +6,16 @@ import (
 )
 
 type Endpoints struct {
-	BrokerIngest     string `json:"broker_ingest"`
-	BrokerFanout     string `json:"broker_fanout"`
-	AnalyticsREP     string `json:"analytics_rep"`
-	TrafficLightPull string `json:"traffic_light_pull"`
-	DBPrimaryPull    string `json:"db_primary_pull"`
-	DBReplicaPull    string `json:"db_replica_pull"`
-	DBPrimaryREP     string `json:"db_primary_rep"`
-	DBReplicaREP     string `json:"db_replica_rep"`
-	VisualizerHTTP   string `json:"visualizer_http"`
+	BrokerIngest              string `json:"broker_ingest"`
+	BrokerFanout              string `json:"broker_fanout"`
+	AnalyticsREP              string `json:"analytics_rep"`
+	TrafficLightPull          string `json:"traffic_light_pull"`
+	TrafficLightExecutedPush  string `json:"traffic_light_executed_push"` // Donde traffic-light envía comandos ejecutados
+	DBPrimaryPull             string `json:"db_primary_pull"`
+	DBReplicaPull             string `json:"db_replica_pull"`
+	DBPrimaryREP              string `json:"db_primary_rep"`
+	DBReplicaREP              string `json:"db_replica_rep"`
+	VisualizerHTTP            string `json:"visualizer_http"`
 }
 
 type IntersectionConfig struct {
