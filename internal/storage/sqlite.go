@@ -23,7 +23,11 @@ func NowStoreTime() time.Time {
 }
 
 func toStoreTime(value time.Time) string {
-	return value.In(storeTimeZone).Format(time.RFC3339)
+	return value.In(storeTimeZone).Format(time.RFC3339Nano)
+}
+
+func parseStoreTime(value string) (time.Time, error) {
+	return time.ParseInLocation(time.RFC3339Nano, value, storeTimeZone)
 }
 
 func Open(path string) (*Store, error) {
@@ -201,7 +205,7 @@ func (s *Store) QueryCurrent(intersection string) ([]model.IntersectionSnapshot,
 			return nil, err
 		}
 		snapshot.HasSemaphore = hasSemaphore == 1
-		snapshot.UpdatedAt, _ = time.Parse(time.RFC3339, createdAt)
+		snapshot.UpdatedAt, _ = parseStoreTime(createdAt)
 		out = append(out, snapshot)
 	}
 	return out, rows.Err()
