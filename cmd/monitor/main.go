@@ -41,13 +41,8 @@ func main() {
 	runCLIMonitor(cfg)
 }
 
-// runAuxiliaryMonitor levanta un servidor REP para analytics y tambien deja un CLI local disponible.
+// runAuxiliaryMonitor abre una consola local que consulta la replica y envia ordenes a analytics.
 func runAuxiliaryMonitor(cfg config.CityConfig) {
-	if cfg.Endpoints.MonitorAuxiliar == "" {
-		log.Fatalf("[monitor-aux] MonitorAuxiliar endpoint no configurado")
-	}
-
-	log.Printf("[monitor-aux] iniciando modo auxiliar en endpoint: %s", cfg.Endpoints.MonitorAuxiliar)
 	log.Printf("[monitor-aux] consultando desde DB Replica: %s", cfg.Endpoints.DBReplicaREP)
 
 	router := storage.Router{
@@ -55,93 +50,11 @@ func runAuxiliaryMonitor(cfg config.CityConfig) {
 		Replica: newDBClient(cfg.Endpoints.DBReplicaREP),
 	}
 
-	rep := listenAuxiliarySocket(cfg.Endpoints.MonitorAuxiliar)
-	defer rep.Close()
-
-	go serveAuxiliaryRequests(rep, &router)
-
 	analyticsReq := dialAnalytics(cfg.Endpoints.AnalyticsREP)
 	defer analyticsReq.Close()
 
 	fmt.Println("[monitor-aux] listo. Escribe 'help' para ver comandos.")
 	runConsoleLoop("[monitor-aux-cli]", &router, analyticsReq)
-}
-
-func listenAuxiliarySocket(endpoint string) zmq4.Socket {
-	ctx := context.Background()
-
-	var lastErr error
-	for attempts := 1; attempts <= 3; attempts++ {
-		rep := zmq4.NewRep(ctx)
-		if err := rep.Listen(endpoint); err == nil {
-			log.Printf("[monitor-aux] escuchando exitosamente en %s (intento %d)", endpoint, attempts)
-			return rep
-		} else {
-			lastErr = err
-			log.Printf("[monitor-aux] fallo al escuchar (intento %d): %v", attempts, err)
-			rep.Close()
-			if attempts < 3 {
-				time.Sleep(500 * time.Millisecond)
-			}
-		}
-	}
-
-	log.Fatalf("[monitor-aux] no se pudo escuchar en %s: %v", endpoint, lastErr)
-	return nil
-}
-
-func serveAuxiliaryRequests(rep zmq4.Socket, router *storage.Router) {
-	log.Printf("[monitor-aux] esperando peticiones de analytics...")
-
-	for {
-		msg, err := rep.Recv()
-		if err != nil {
-			log.Printf("[monitor-aux] error recibiendo mensaje: %v", err)
-			continue
-		}
-
-		response := handleAuxiliaryMessage(msg, router)
-		data, _ := json.Marshal(response)
-		_ = rep.Send(zmq4.NewMsg(data))
-	}
-}
-
-func handleAuxiliaryMessage(msg zmq4.Msg, router *storage.Router) model.MonitorResponse {
-	if len(msg.Frames) == 0 {
-		return model.MonitorResponse{Success: false, Message: "empty request"}
-	}
-
-	var req model.MonitorRequest
-	if err := json.Unmarshal(msg.Frames[0], &req); err != nil {
-		log.Printf("[monitor-aux] error decodificando JSON: %v", err)
-		return model.MonitorResponse{Success: false, Message: "invalid json"}
-	}
-
-	log.Printf("[monitor-aux] procesando accion: %s", req.Action)
-
-	switch strings.ToLower(req.Action) {
-	case "current":
-		data, err := router.QueryCurrent(req.Intersection)
-		if err != nil {
-			return model.MonitorResponse{Success: false, Message: err.Error()}
-		}
-
-		var result []model.IntersectionSnapshot
-		_ = json.Unmarshal(data, &result)
-		return model.MonitorResponse{Success: true, Message: "consulta puntual", Data: result}
-	case "history", "metric_count":
-		body, _ := json.Marshal(req)
-		data, err := router.QueryHistory(body)
-		if err != nil {
-			return model.MonitorResponse{Success: false, Message: err.Error()}
-		}
-
-		var result any
-		_ = json.Unmarshal(data, &result)
-		return model.MonitorResponse{Success: true, Message: "consulta procesada", Data: result}
-	default:
-		return model.MonitorResponse{Success: false, Message: "accion no soportada en monitor auxiliar"}
-	}
 }
 
 func runCLIMonitor(cfg config.CityConfig) {

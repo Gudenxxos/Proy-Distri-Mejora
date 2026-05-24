@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -241,12 +240,12 @@ func (a *analyticsApp) startAuxMonitor() {
 	}
 
 	if runtime.GOOS == "windows" {
-		log.Printf("[analytics] Monitor Auxiliar lanzado en terminal separada escuchando en %s", a.cfg.Endpoints.MonitorAuxiliar)
+		log.Printf("[analytics] Monitor Auxiliar lanzado en terminal separada")
 		return
 	}
 
 	a.auxMonitorCmd = cmd.Process
-	log.Printf("[analytics] Monitor Auxiliar iniciado (PID: %d) escuchando en %s", a.auxMonitorCmd.Pid, a.cfg.Endpoints.MonitorAuxiliar)
+	log.Printf("[analytics] Monitor Auxiliar iniciado (PID: %d)", a.auxMonitorCmd.Pid)
 
 	// Monitorear el proceso en segundo plano
 	go func() {
@@ -363,52 +362,10 @@ func (a *analyticsApp) handleRequests(rep, pushLights, pushPrimary, pushReplica,
 			continue
 		}
 
-		// Si primary está caído y es una acción que requiere consulta, redirigir al monitor auxiliar
-		if !a.IsPC3Healthy() && (strings.ToLower(req.Action) == "current" || strings.ToLower(req.Action) == "history" || strings.ToLower(req.Action) == "metric_count") {
-			response := a.forwardToAuxMonitor(req)
-			data, _ := json.Marshal(response)
-			_ = rep.Send(zmq4.NewMsg(data))
-			continue
-		}
-
 		response := a.handleRequest(req, pushLights, pushPrimary, pushReplica, pub)
 		data, _ := json.Marshal(response)
 		_ = rep.Send(zmq4.NewMsg(data))
 	}
-}
-
-// forwardToAuxMonitor redirige una petición al monitor auxiliar
-func (a *analyticsApp) forwardToAuxMonitor(req model.MonitorRequest) model.MonitorResponse {
-	if a.cfg.Endpoints.MonitorAuxiliar == "" {
-		return model.MonitorResponse{Success: false, Message: "monitor auxiliar no configurado"}
-	}
-
-	ctx := context.Background()
-	auxReq := zmq4.NewReq(ctx, zmq4.WithTimeout(5*time.Second))
-	defer auxReq.Close()
-
-	if err := auxReq.Dial(a.cfg.Endpoints.MonitorAuxiliar); err != nil {
-		log.Printf("[analytics] Error conectando a monitor auxiliar: %v", err)
-		return model.MonitorResponse{Success: false, Message: fmt.Sprintf("error conectando a monitor auxiliar: %v", err)}
-	}
-
-	data, _ := json.Marshal(req)
-	if err := auxReq.Send(zmq4.NewMsg(data)); err != nil {
-		log.Printf("[analytics] Error enviando petición a monitor auxiliar: %v", err)
-		return model.MonitorResponse{Success: false, Message: fmt.Sprintf("error enviando petición a monitor auxiliar: %v", err)}
-	}
-
-	msg, err := auxReq.Recv()
-	if err != nil {
-		log.Printf("[analytics] Error recibiendo respuesta de monitor auxiliar: %v", err)
-		return model.MonitorResponse{Success: false, Message: fmt.Sprintf("error recibiendo respuesta de monitor auxiliar: %v", err)}
-	}
-
-	var resp model.MonitorResponse
-	if len(msg.Frames) > 0 {
-		json.Unmarshal(msg.Frames[0], &resp)
-	}
-	return resp
 }
 
 func (a *analyticsApp) handleRequest(req model.MonitorRequest, pushLights, pushPrimary, pushReplica, pub zmq4.Socket) model.MonitorResponse {
