@@ -55,7 +55,7 @@ func TestBuildForceGreen(t *testing.T) {
 		},
 	})
 
-	cmd, err := e.BuildForceGreen("INT_B3", 12)
+	cmd, err := e.BuildForceGreen("INT_B3", 12, model.LightPhaseVertical)
 	if err != nil {
 		t.Fatal(err)
 	}

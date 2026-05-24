@@ -49,7 +49,7 @@ func (e Evaluator) Evaluate(snapshot model.IntersectionSnapshot) (string, *model
 		return StatusCongestion, &model.LightCommand{
 			CommandID:    fmt.Sprintf("cmd-%d", time.Now().UnixNano()),
 			Intersection: snapshot.Intersection,
-			TargetState:  e.determinePhaseForIntersection(snapshot.Intersection),
+			TargetState:  e.determinePhaseForIntersection(snapshot.Intersection, snapshot.LightState),
 			DurationSec:  duration,
 			Reason:       ReasonCongestion,
 			RequestedBy:  RequestAnalytics,
@@ -60,7 +60,7 @@ func (e Evaluator) Evaluate(snapshot model.IntersectionSnapshot) (string, *model
 		return StatusNormal, &model.LightCommand{
 			CommandID:    fmt.Sprintf("cmd-%d", time.Now().UnixNano()),
 			Intersection: snapshot.Intersection,
-			TargetState:  e.determinePhaseForIntersection(snapshot.Intersection),
+			TargetState:  StatusNormal,
 			DurationSec:  duration,
 			Reason:       ReasonNormal,
 			RequestedBy:  RequestAnalytics,
@@ -73,25 +73,21 @@ func (e Evaluator) Evaluate(snapshot model.IntersectionSnapshot) (string, *model
 
 // determinePhaseForIntersection determines the light phase based on row/column priority.
 // According to requirements: if intersection is B3, row B wins (horizontal).
-func (e Evaluator) determinePhaseForIntersection(intersectionID string) string {
-	row, col, ok := parseIntersectionID(intersectionID)
-	if !ok {
+func (e Evaluator) determinePhaseForIntersection(intersectionID string, currentPhase string) string {
+// Si el estado actual es HORIZONTAL, return VERTICAL
+	// Si el estado actual es VERTICAL, return HORIZONTAL
+	// Si el estado actual es NONE o desconocido, determinar por la interseccion
+	if currentPhase == model.LightPhaseHorizontal {
 		return model.LightPhaseVertical
-	}
-
-	// Row B takes priority and makes it horizontal
-	if row == "B" {
+	} else if currentPhase == model.LightPhaseVertical {
 		return model.LightPhaseHorizontal
 	}
-
-	// Column 3 makes it vertical
-	if col == 3 {
-		return model.LightPhaseVertical
-	}
-
-	// Default to vertical
-	return model.LightPhaseVertical
+	return model.LightPhaseHorizontal
 }
+	
+	
+	
+
 
 func parseIntersectionID(id string) (string, int, bool) {
 	label := strings.TrimPrefix(strings.ToUpper(strings.TrimSpace(id)), "INT_")
@@ -177,7 +173,7 @@ func (e Evaluator) BuildPriorityWave(route string, city *model.City) []model.Lig
 	return commands
 }
 
-func (e Evaluator) BuildForceGreen(intersection string, durationSec int) (model.LightCommand, error) {
+func (e Evaluator) BuildForceGreen(intersection string, durationSec int, currentPhase string) (model.LightCommand, error) {
 	if durationSec <= 0 {
 		return model.LightCommand{}, fmt.Errorf("duracion invalida para force_green: %d", durationSec)
 	}
@@ -190,7 +186,7 @@ func (e Evaluator) BuildForceGreen(intersection string, durationSec int) (model.
 	return model.LightCommand{
 		CommandID:    fmt.Sprintf("cmd-%d", time.Now().UnixNano()),
 		Intersection: intersection,
-		TargetState:  e.determinePhaseForIntersection(intersection),
+		TargetState:  e.determinePhaseForIntersection(intersection, currentPhase),
 		DurationSec:  durationSec,
 		Reason:       ReasonForceGreen,
 		RequestedBy:  RequestMonitoring,

@@ -429,7 +429,11 @@ func (a *analyticsApp) handleRequest(req model.MonitorRequest, pushLights, pushP
 	case "health":
 		return model.MonitorResponse{Success: true, Message: "analytics ok"}
 	case model.ActionForceGreen:
-		cmd, err := a.evaluator.BuildForceGreen(req.Intersection, req.DurationSec)
+		currentPhase, ok := a.city.Get(req.Intersection)
+		if !ok {
+			return model.MonitorResponse{Success: false, Message: "intersection not found"}
+		}
+		cmd, err := a.evaluator.BuildForceGreen(req.Intersection, req.DurationSec, currentPhase.LightState)
 		if err != nil {
 			return model.MonitorResponse{Success: false, Message: err.Error()}
 		}
