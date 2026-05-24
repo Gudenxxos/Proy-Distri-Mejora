@@ -108,7 +108,6 @@ func (c *City) UpdateFromInductive(intersection string, counted int) (*Intersect
 	}
 
 	item.VehiclesCount = counted
-	item.QueueLength = int(math.Max(0, float64(item.QueueLength-counted)))
 	item.LastUpdate = nowModelTime()
 
 	return c.snapshot(item), nil

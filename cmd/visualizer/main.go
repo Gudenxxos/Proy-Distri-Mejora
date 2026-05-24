@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/go-zeromq/zmq4"
@@ -64,6 +65,16 @@ func newVisualizer(cfg config.CityConfig) *visualizer {
 	}
 }
 
+func (v *visualizer) hasSensor(intersection string) bool {
+	intersection = strings.ToUpper(strings.TrimSpace(intersection))
+	for _, sp := range v.cfg.SensorProfiles {
+		if strings.ToUpper(strings.TrimSpace(sp.Intersection)) == intersection {
+			return true
+		}
+	}
+	return false
+}
+
 func (v *visualizer) consumeBroker() {
 	sub := zmq4.NewSub(context.Background())
 	defer sub.Close()
@@ -101,6 +112,11 @@ func (v *visualizer) consumeBroker() {
 				item.QueueLength = event.Volumen
 				item.AvgSpeed = event.VelocidadPromedio
 				v.state[event.Interseccion] = item
+
+				// Ejecutar lógica adicional solo si la intersección tiene un sensor configurado
+				if (item.QueueLength >= 8 || item.AvgSpeed < 20) && v.hasSensor(item.Intersection) {
+					item.Status = "CONGESTED"
+				}
 			}
 		case model.TopicGPS:
 			var event model.GPSEvent
@@ -110,6 +126,10 @@ func (v *visualizer) consumeBroker() {
 				item.Density = event.Densidad
 				item.AvgSpeed = event.VelocidadPromedio
 				v.state[event.Interseccion] = item
+				// Ejecutar lógica adicional solo si la intersección tiene un sensor configurado
+				if (item.Density >= 35 || item.AvgSpeed < 20) && v.hasSensor(item.Intersection) {
+					item.Status = "CONGESTED"
+				}
 			}
 		case model.TopicInductive:
 			var event model.InductiveEvent
@@ -118,6 +138,10 @@ func (v *visualizer) consumeBroker() {
 				item.Intersection = event.Interseccion
 				item.VehiclesCounted = event.VehiculosContados
 				v.state[event.Interseccion] = item
+				// Ejecutar lógica adicional solo si la intersección tiene un sensor configurado
+				if (item.VehiclesCounted >= 7) && v.hasSensor(item.Intersection) {
+					item.Status = "CONGESTED"
+				}
 			}
 		}
 		v.broadcast(payload, topic)
@@ -154,6 +178,7 @@ func (v *visualizer) consumeLightCommands() {
 		item := v.state[cmd.Intersection]
 		item.Intersection = cmd.Intersection
 		item.LightState = cmd.TargetState
+		item.Status = cmd.Reason
 		v.state[cmd.Intersection] = item
 		
 		// Enviar actualizaciones a clientes SSE

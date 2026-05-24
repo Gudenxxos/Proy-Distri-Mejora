@@ -138,6 +138,9 @@ func (app *trafficLightApp) processCommand(cmd model.LightCommand) {
 	if executed.RequestedBy == "" {
 		executed.RequestedBy = "analytics"
 	}
+	/* if executed.Reason == "" {
+		executed.Reason = "manual_command"
+	} */
 
 	app.emitLightCommand(executed)
 	log.Printf("[traffic-light] %s %s -> %s por %ds (reason=%s)", intersection, previous, phase, duration, executed.Reason)
