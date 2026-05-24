@@ -311,7 +311,9 @@ func (a *analyticsApp) handleExecutedLightCommands(pullExecuted, pushPrimary, pu
 			cmd.CommandID, cmd.RequestedAt, cmd.ChangedAt)
 
 		/* AQUÍ DEBERÍA CAMBIAR EL OBJETO DE CIUDAD PARA REFLEJAR EL CAMBIO DE ESTADO */
+		a.mu.Lock()
 		a.city.SetLight(cmd.Intersection, cmd.TargetState)
+		a.mu.Unlock()
 
 		// Persistir comando ejecutado
 		data, _ := json.Marshal(cmd)
