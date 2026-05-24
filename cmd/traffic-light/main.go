@@ -57,6 +57,7 @@ func main() {
 	for _, intersection := range cfg.Intersections {
 		if intersection.HasSemaphore {
 			app.states[intersection.ID] = model.LightPhaseHorizontal
+			app.resetTimer(intersection.ID, 0)
 		}
 	}
 
