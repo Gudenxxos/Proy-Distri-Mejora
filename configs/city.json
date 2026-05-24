@@ -155,31 +155,31 @@
       "sensor_id": "CAM-A3",
       "sensor_type": "camara",
       "intersection": "INT_A3",
-      "interval_seconds": 15
+      "interval_seconds": 5
     },
     {
       "sensor_id": "GPS-A3",
       "sensor_type": "gps",
       "intersection": "INT_A3",
-      "interval_seconds": 15
+      "interval_seconds": 7
     },
     {
       "sensor_id": "ESP-A3",
       "sensor_type": "espira_inductiva",
       "intersection": "INT_A3",
-      "interval_seconds": 30
+      "interval_seconds": 6
     },
     {
       "sensor_id": "CAM-B2",
       "sensor_type": "camara",
       "intersection": "INT_B2",
-      "interval_seconds": 15
+      "interval_seconds": 8
     },
     {
       "sensor_id": "GPS-B2",
       "sensor_type": "gps",
       "intersection": "INT_B2",
-      "interval_seconds": 15
+      "interval_seconds": 10
     },
     {
       "sensor_id": "ESP-B2",
@@ -191,19 +191,19 @@
       "sensor_id": "CAM-B3",
       "sensor_type": "camara",
       "intersection": "INT_B3",
-      "interval_seconds": 15
+      "interval_seconds": 12
     },
     {
       "sensor_id": "GPS-B3",
       "sensor_type": "gps",
       "intersection": "INT_B3",
-      "interval_seconds": 15
+      "interval_seconds": 8
     },
     {
       "sensor_id": "ESP-B3",
       "sensor_type": "espira_inductiva",
       "intersection": "INT_B3",
-      "interval_seconds": 30
+      "interval_seconds": 10
     },
     {
       "sensor_id": "CAM-B4",
@@ -215,67 +215,67 @@
       "sensor_id": "GPS-B4",
       "sensor_type": "gps",
       "intersection": "INT_B4",
-      "interval_seconds": 15
+      "interval_seconds": 20
     },
     {
       "sensor_id": "ESP-B4",
       "sensor_type": "espira_inductiva",
       "intersection": "INT_B4",
-      "interval_seconds": 30
+      "interval_seconds": 5
     },
     {
       "sensor_id": "CAM-C2",
       "sensor_type": "camara",
       "intersection": "INT_C2",
-      "interval_seconds": 15
+      "interval_seconds": 5
     },
     {
       "sensor_id": "GPS-C2",
       "sensor_type": "gps",
       "intersection": "INT_C2",
-      "interval_seconds": 15
+      "interval_seconds": 1
     },
     {
       "sensor_id": "ESP-C2",
       "sensor_type": "espira_inductiva",
       "intersection": "INT_C2",
-      "interval_seconds": 30
+      "interval_seconds": 12
     },
     {
       "sensor_id": "CAM-C3",
       "sensor_type": "camara",
       "intersection": "INT_C3",
-      "interval_seconds": 15
+      "interval_seconds": 5
     },
     {
       "sensor_id": "GPS-C3",
       "sensor_type": "gps",
       "intersection": "INT_C3",
-      "interval_seconds": 15
+      "interval_seconds": 10
     },
     {
       "sensor_id": "ESP-C3",
       "sensor_type": "espira_inductiva",
       "intersection": "INT_C3",
-      "interval_seconds": 30
+      "interval_seconds": 5
     },
     {
       "sensor_id": "CAM-D3",
       "sensor_type": "camara",
       "intersection": "INT_D3",
-      "interval_seconds": 15
+      "interval_seconds": 7
     },
     {
       "sensor_id": "GPS-D3",
       "sensor_type": "gps",
       "intersection": "INT_D3",
-      "interval_seconds": 15
+      "interval_seconds": 9
     },
     {
       "sensor_id": "ESP-D3",
       "sensor_type": "espira_inductiva",
       "intersection": "INT_D3",
-      "interval_seconds": 30
+      "interval_seconds": 20
     }
   ]
 }
