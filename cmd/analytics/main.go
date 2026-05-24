@@ -60,11 +60,6 @@ func (a *analyticsApp) run() error {
 		return err
 	}
 
-	pub := zmq4.NewPub(ctx)
-	if err := pub.Dial(a.cfg.Endpoints.BrokerIngest); err != nil {
-		return err
-	}
-
 	pushLights := zmq4.NewPush(ctx)
 	if err := pushLights.Dial(a.cfg.Endpoints.TrafficLightPull); err != nil {
 		return err
@@ -77,11 +72,6 @@ func (a *analyticsApp) run() error {
 
 	pushReplica := zmq4.NewPush(ctx)
 	if err := pushReplica.Dial(a.cfg.Endpoints.DBReplicaPull); err != nil {
-		return err
-	}
-
-	pushVisualizer := zmq4.NewPush(ctx)
-	if err := pushVisualizer.Dial(a.cfg.Endpoints.VisualizerLightPush); err != nil {
 		return err
 	}
 
@@ -114,7 +104,7 @@ func (a *analyticsApp) run() error {
 	// Goroutine para verificar periódicamente la salud del DB primario
 	go a.healthCheckLoop(ctx)
 
-	go a.handleRequests(rep, pushLights, pushPrimary, pushReplica, pub, pushVisualizer)
+	go a.handleRequests(rep, pushLights, pushPrimary, pushReplica)
 
 	// Goroutine para recibir y persistir comandos ejecutados desde traffic-light
 	go a.handleExecutedLightCommands(pullExecutedLights, pushPrimary, pushReplica)
@@ -131,7 +121,7 @@ func (a *analyticsApp) run() error {
 
 		topic := string(msg.Frames[0])
 		payload := msg.Frames[1]
-		a.processSensor(topic, payload, pushLights, pushPrimary, pushReplica, pub, pushVisualizer)
+		a.processSensor(topic, payload, pushLights, pushPrimary, pushReplica)
 	}
 }
 
@@ -339,7 +329,7 @@ func (a *analyticsApp) IsPC3Healthy() bool {
 	return a.isPc3Healthy
 }
 
-func (a *analyticsApp) processSensor(topic string, payload []byte, pushLights, pushPrimary, pushReplica, pub, pushVisualizer zmq4.Socket) {
+func (a *analyticsApp) processSensor(topic string, payload []byte, pushLights, pushPrimary, pushReplica zmq4.Socket) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -390,15 +380,14 @@ func (a *analyticsApp) processSensor(topic string, payload []byte, pushLights, p
 	a.city.SetStatus(latest.Intersection, status)
 
 	a.persistSnapshot(*latest, topic, payload, pushPrimary, pushReplica)
-	a.publishSnapshot(*latest, pub)
 
 	if command != nil && latest.HasSemaphore {
 		log.Printf("[analytics] %s => %s (%s)", latest.Intersection, command.TargetState, command.Reason)
-		a.sendLightCommand(*command, pushLights, pushPrimary, pushReplica, pub, pushVisualizer)
+		a.sendLightCommand(*command, pushLights, pushPrimary, pushReplica)
 	}
 }
 
-func (a *analyticsApp) handleRequests(rep, pushLights, pushPrimary, pushReplica, pub, pushVisualizer zmq4.Socket) {
+func (a *analyticsApp) handleRequests(rep, pushLights, pushPrimary, pushReplica zmq4.Socket) {
 	for {
 		msg, err := rep.Recv()
 		if err != nil {
@@ -417,36 +406,23 @@ func (a *analyticsApp) handleRequests(rep, pushLights, pushPrimary, pushReplica,
 			continue
 		}
 
-		response := a.handleRequest(req, pushLights, pushPrimary, pushReplica, pub, pushVisualizer)
+		response := a.handleRequest(req, pushLights, pushPrimary, pushReplica)
 		data, _ := json.Marshal(response)
 		_ = rep.Send(zmq4.NewMsg(data))
 	}
 }
 
-func (a *analyticsApp) handleRequest(req model.MonitorRequest, pushLights, pushPrimary, pushReplica, pub, pushVisualizer zmq4.Socket) model.MonitorResponse {
+func (a *analyticsApp) handleRequest(req model.MonitorRequest, pushLights, pushPrimary, pushReplica zmq4.Socket) model.MonitorResponse {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
 	switch strings.ToLower(req.Action) {
 	case "health":
 		return model.MonitorResponse{Success: true, Message: "analytics ok"}
-	case "force_green":
-		targetPhase := model.PreferredPhaseForIntersectionID(req.Intersection)
-		cmd := model.LightCommand{
-			CommandID:    commandID(),
-			Intersection: req.Intersection,
-			TargetState:  targetPhase,
-			DurationSec:  req.DurationSec,
-			Reason:       analyticslogic.ReasonPriority,
-			RequestedBy:  analyticslogic.RequestMonitoring,
-			RequestedAt:  storage.NowStoreTime(),
-		}
-		a.sendLightCommand(cmd, pushLights, pushPrimary, pushReplica, pub, pushVisualizer)
-		return model.MonitorResponse{Success: true, Message: "force_green aplicado", Data: cmd}
 	case "force_green_wave":
 		commands := a.evaluator.BuildPriorityWave(req.Route, a.city)
 		for _, cmd := range commands {
-			a.sendLightCommand(cmd, pushLights, pushPrimary, pushReplica, pub, pushVisualizer)
+			a.sendLightCommand(cmd, pushLights, pushPrimary, pushReplica)
 		}
 		return model.MonitorResponse{Success: true, Message: "ola verde aplicada", Data: commands}
 	case "restore_automatic":
@@ -460,22 +436,20 @@ func (a *analyticsApp) handleRequest(req model.MonitorRequest, pushLights, pushP
 			RequestedBy:  analyticslogic.RequestMonitoring,
 			RequestedAt:  storage.NowStoreTime(),
 		}
-		a.sendLightCommand(cmd, pushLights, pushPrimary, pushReplica, pub, pushVisualizer)
+		a.sendLightCommand(cmd, pushLights, pushPrimary, pushReplica)
 		return model.MonitorResponse{Success: true, Message: "modo automatico restaurado", Data: cmd}
 	default:
 		return model.MonitorResponse{Success: false, Message: "accion no soportada"}
 	}
 }
 
-func (a *analyticsApp) sendLightCommand(cmd model.LightCommand, pushLights, pushPrimary, pushReplica, pub, pushVisualizer zmq4.Socket) {
+func (a *analyticsApp) sendLightCommand(cmd model.LightCommand, pushLights, pushPrimary, pushReplica zmq4.Socket) {
 	// Asignar RequestedAt y dejar ChangedAt vacío
 	cmd.RequestedAt = storage.NowStoreTime()
 	cmd.ChangedAt = nil
 
 	data, _ := json.Marshal(cmd)
 	_ = pushLights.Send(zmq4.NewMsg(data))
-	_ = pub.Send(zmq4.NewMsgFrom([]byte(model.TopicCommand), data))
-	_ = pushVisualizer.Send(zmq4.NewMsg(data))
 
 	// NO persistir aquí - la persistencia ocurre cuando traffic-light devuelve el comando ejecutado
 	// con ChangedAt asignado
@@ -490,16 +464,6 @@ func (a *analyticsApp) persistSnapshot(snapshot model.IntersectionSnapshot, topi
 		CreatedAt:  storage.NowStoreTime(),
 	}
 	a.persistEnvelope(env, pushPrimary, pushReplica)
-}
-
-func (a *analyticsApp) publishSnapshot(snapshot model.IntersectionSnapshot, pub zmq4.Socket) {
-	data, _ := json.Marshal(model.PersistEnvelope{
-		Kind:      "snapshot",
-		Topic:     model.TopicSnapshot,
-		Snapshot:  &snapshot,
-		CreatedAt: storage.NowStoreTime(),
-	})
-	_ = pub.Send(zmq4.NewMsgFrom([]byte(model.TopicSnapshot), data))
 }
 
 func (a *analyticsApp) persistEnvelope(env model.PersistEnvelope, pushPrimary, pushReplica zmq4.Socket) {

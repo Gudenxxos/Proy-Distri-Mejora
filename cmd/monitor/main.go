@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -59,7 +58,7 @@ func runAuxiliaryMonitor(cfg config.CityConfig) {
 
 func runCLIMonitor(cfg config.CityConfig) {
 	var (
-		action       = flag.String("action", "", "Accion: health, current, history, force_green, force_green_wave, restore_automatic, metric_count")
+		action       = flag.String("action", "", "Accion: health, current, history, force_green_wave, restore_automatic, metric_count")
 		intersection = flag.String("intersection", "INT_B3", "Interseccion objetivo")
 		route        = flag.String("route", "B", "Ruta priorizada")
 		duration     = flag.Int("duration", 20, "Duracion en segundos")
@@ -145,22 +144,6 @@ func parseConsoleCommand(line string) (model.MonitorRequest, bool, bool) {
 		}
 		req.Intersection = parts[1]
 		return req, false, true
-	case "force_green":
-		if len(parts) < 2 {
-			fmt.Println("Uso: force_green <intersection> [duration_sec]")
-			return req, false, false
-		}
-		req.Intersection = parts[1]
-		req.DurationSec = 20
-		if len(parts) >= 3 {
-			duration, err := strconv.Atoi(parts[2])
-			if err != nil {
-				fmt.Println("La duracion debe ser un numero entero de segundos")
-				return req, false, false
-			}
-			req.DurationSec = duration
-		}
-		return req, false, true
 	case "force_green_wave":
 		if len(parts) < 2 {
 			fmt.Println("Uso: force_green_wave <route>")
@@ -227,7 +210,6 @@ func printConsoleHelp() {
   current <intersection>
   history
   metric_count
-  force_green <intersection> [duration_sec]
   force_green_wave <route>
   restore_automatic <intersection>
   exit | quit`)

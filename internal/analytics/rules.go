@@ -2,6 +2,7 @@ package analytics
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -34,27 +35,32 @@ func NewEvaluator(cfg config.CityConfig) Evaluator {
 	return Evaluator{cfg: cfg}
 }
 
+// Evaluate examines the intersection snapshot and determines if congestion is detected.
+// It applies row/column level congestion logic and returns the status and command.
+// Returns:
+//   - Status: NORMAL, CONGESTION, or PRIORITY
+//   - Command: Light command to apply at row/column level, or nil if no action needed
 func (e Evaluator) Evaluate(snapshot model.IntersectionSnapshot) (string, *model.LightCommand) {
 	switch {
 	case snapshot.QueueLength >= 8 || snapshot.AvgSpeed < 20 || snapshot.Density >= 35:
+		// Congestion detected in this intersection - apply row/column wide command
 		duration := e.cfg.BaseGreenSeconds + e.cfg.CongestionExtensionSeconds
-		targetPhase := model.PreferredPhaseForIntersectionID(snapshot.Intersection)
 		return StatusCongestion, &model.LightCommand{
 			CommandID:    fmt.Sprintf("cmd-%d", time.Now().UnixNano()),
 			Intersection: snapshot.Intersection,
-			TargetState:  targetPhase,
+			TargetState:  e.determinePhaseForIntersection(snapshot.Intersection),
 			DurationSec:  duration,
 			Reason:       ReasonCongestion,
 			RequestedBy:  RequestAnalytics,
 			RequestedAt:  nowAnalyticsTime(),
 		}
 	case snapshot.QueueLength < 5 && snapshot.AvgSpeed > 35 && snapshot.Density < 20 && snapshot.HasSemaphore:
-		targetPhase := model.PreferredPhaseForIntersectionID(snapshot.Intersection)
+		duration := e.cfg.BaseGreenSeconds
 		return StatusNormal, &model.LightCommand{
 			CommandID:    fmt.Sprintf("cmd-%d", time.Now().UnixNano()),
 			Intersection: snapshot.Intersection,
-			TargetState:  targetPhase,
-			DurationSec:  e.cfg.BaseGreenSeconds,
+			TargetState:  e.determinePhaseForIntersection(snapshot.Intersection),
+			DurationSec:  duration,
 			Reason:       ReasonNormal,
 			RequestedBy:  RequestAnalytics,
 			RequestedAt:  nowAnalyticsTime(),
@@ -64,9 +70,61 @@ func (e Evaluator) Evaluate(snapshot model.IntersectionSnapshot) (string, *model
 	}
 }
 
+// determinePhaseForIntersection determines the light phase based on row/column priority.
+// According to requirements: if intersection is B3, row B wins (horizontal).
+func (e Evaluator) determinePhaseForIntersection(intersectionID string) string {
+	row, col, ok := parseIntersectionID(intersectionID)
+	if !ok {
+		return model.LightPhaseVertical
+	}
+
+	// Row B takes priority and makes it horizontal
+	if row == "B" {
+		return model.LightPhaseHorizontal
+	}
+
+	// Column 3 makes it vertical
+	if col == 3 {
+		return model.LightPhaseVertical
+	}
+
+	// Default to vertical
+	return model.LightPhaseVertical
+}
+
+func parseIntersectionID(id string) (string, int, bool) {
+	label := strings.TrimPrefix(strings.ToUpper(strings.TrimSpace(id)), "INT_")
+	if len(label) < 2 {
+		return "", 0, false
+	}
+
+	row := string(label[0])
+	colValue := 0
+	for _, ch := range label[1:] {
+		if ch < '0' || ch > '9' {
+			return "", 0, false
+		}
+		colValue = (colValue * 10) + int(ch-'0')
+	}
+
+	return row, colValue, true
+}
+
 func (e Evaluator) BuildPriorityWave(route string, city *model.City) []model.LightCommand {
 	route = strings.ToUpper(strings.TrimSpace(route))
 	commands := make([]model.LightCommand, 0)
+
+	// Determine if route is a row or column
+	isRow := len(route) == 1 && route >= "A" && route <= "Z"
+	isCol := false
+	colNum := 0
+	if !isRow {
+		// Try to parse as column number
+		if n, err := strconv.Atoi(route); err == nil {
+			isCol = true
+			colNum = n
+		}
+	}
 
 	for _, item := range city.SnapshotAll() {
 		if !item.HasSemaphore {
@@ -78,14 +136,30 @@ func (e Evaluator) BuildPriorityWave(route string, city *model.City) []model.Lig
 		if len(runes) < 2 {
 			continue
 		}
-		row := string(runes[0])
-		col := string(runes[1])
+		rowChar := string(runes[0])
+		colStr := string(runes[1:])
+		colVal := 0
+		fmt.Sscanf(colStr, "%d", &colVal)
 
-		if route == row || route == col {
-			targetPhase := model.LightPhaseHorizontal
-			if route == col {
+		// Check if this intersection matches the route
+		matches := false
+		if isRow && rowChar == route {
+			matches = true
+		} else if isCol && colVal == colNum {
+			matches = true
+		}
+
+		if matches {
+			// Determine phase based on whether it's row or column
+			var targetPhase string
+			if isRow {
+				targetPhase = model.LightPhaseHorizontal
+			} else if isCol {
+				targetPhase = model.LightPhaseVertical
+			} else {
 				targetPhase = model.LightPhaseVertical
 			}
+
 			commands = append(commands, model.LightCommand{
 				CommandID:     fmt.Sprintf("cmd-%d", time.Now().UnixNano()),
 				Intersection:  item.Intersection,

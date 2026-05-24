@@ -195,15 +195,7 @@ func (c *City) snapshot(item *IntersectionState) *IntersectionSnapshot {
 }
 
 func PreferredPhaseForIntersection(row string, col int) string {
-	row = strings.ToUpper(strings.TrimSpace(row))
-	switch {
-	case row == "B":
-		return LightPhaseHorizontal
-	case col == 3:
-		return LightPhaseVertical
-	default:
-		return LightPhaseVertical
-	}
+	return LightPhaseHorizontal
 }
 
 func PreferredPhaseForIntersectionID(id string) string {
