@@ -354,7 +354,7 @@ func (a *analyticsApp) processSensor(topic string, payload []byte, pushLights, p
 	case model.TopicGPS:
 		var event model.GPSEvent
 		if err = json.Unmarshal(payload, &event); err == nil {
-			snapshot, err = a.city.UpdateFromGPS(event.Interseccion, event.Densidad, event.VelocidadPromedio)
+			snapshot, err = a.city.UpdateFromGPS(event.Interseccion, event.Densidad, event.VelocidadPromedio, event.NivelCongestion)
 		}
 	case model.TopicInductive:
 		var event model.InductiveEvent
