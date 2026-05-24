@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"flag"
@@ -42,7 +43,7 @@ func main() {
 }
 
 // runAuxiliaryMonitor levanta el monitor en modo servidor auxiliar
-// Escucha en MonitorAuxiliar y consulta directamente la réplica
+// Escucha en MonitorAuxiliar Y mantiene un CLI interactivo
 func runAuxiliaryMonitor(cfg config.CityConfig) {
 	if cfg.Endpoints.MonitorAuxiliar == "" {
 		log.Fatalf("[monitor-aux] MonitorAuxiliar endpoint no configurado")
@@ -53,7 +54,13 @@ func runAuxiliaryMonitor(cfg config.CityConfig) {
 
 	ctx := context.Background()
 
-	// Intentar escuchar con reintentos
+	// Router que consulta solo la réplica
+	router := storage.Router{
+		Primary: newDBClient(cfg.Endpoints.DBReplicaREP), // Usar replica como primary
+		Replica: newDBClient(cfg.Endpoints.DBReplicaREP),
+	}
+
+	// Inicializar socket REP y escuchar en goroutine
 	var rep zmq4.Socket
 	var err error
 	for attempts := 0; attempts < 3; attempts++ {
@@ -74,68 +81,166 @@ func runAuxiliaryMonitor(cfg config.CityConfig) {
 	}
 	defer rep.Close()
 
-	// Router que consulta solo la réplica
-	router := storage.Router{
-		Primary: newDBClient(cfg.Endpoints.DBReplicaREP), // Usar replica como primary
-		Replica: newDBClient(cfg.Endpoints.DBReplicaREP),
+	log.Printf("[monitor-aux] iniciado correctamente, esperando peticiones en background...")
+	log.Printf("[monitor-aux] CLI también disponible (escribe comandos o 'help' para ver opciones)\n")
+
+	// Lanzar servidor REP en goroutine
+	go func() {
+		for {
+			msg, err := rep.Recv()
+			if err != nil {
+				log.Printf("[monitor-aux] error recibiendo mensaje: %v", err)
+				continue
+			}
+
+			if len(msg.Frames) == 0 {
+				_ = rep.Send(zmq4.NewMsgString(`{"success":false,"message":"empty request"}`))
+				continue
+			}
+
+			var req model.MonitorRequest
+			if err := json.Unmarshal(msg.Frames[0], &req); err != nil {
+				log.Printf("[monitor-aux] error decodificando JSON: %v", err)
+				_ = rep.Send(zmq4.NewMsgString(`{"success":false,"message":"invalid json"}`))
+				continue
+			}
+
+			log.Printf("[monitor-aux] procesando acción: %s", req.Action)
+
+			// Procesar acción
+			var response model.MonitorResponse
+
+			switch strings.ToLower(req.Action) {
+			case "current":
+				data, err := router.QueryCurrent(req.Intersection)
+				if err != nil {
+					log.Printf("[monitor-aux] error en consulta current: %v", err)
+					response = model.MonitorResponse{Success: false, Message: fmt.Sprintf("error: %v", err)}
+				} else {
+					var result []model.IntersectionSnapshot
+					json.Unmarshal(data, &result)
+					response = model.MonitorResponse{Success: true, Message: "consulta puntual", Data: result}
+				}
+			case "history", "metric_count":
+				body, _ := json.Marshal(req)
+				data, err := router.QueryHistory(body)
+				if err != nil {
+					log.Printf("[monitor-aux] error en consulta history/metric: %v", err)
+					response = model.MonitorResponse{Success: false, Message: fmt.Sprintf("error: %v", err)}
+				} else {
+					var result interface{}
+					json.Unmarshal(data, &result)
+					response = model.MonitorResponse{Success: true, Message: "consulta procesada", Data: result}
+				}
+			default:
+				log.Printf("[monitor-aux] acción no soportada: %s", req.Action)
+				response = model.MonitorResponse{Success: false, Message: "accion no soportada en monitor auxiliar"}
+			}
+
+			responseData, _ := json.Marshal(response)
+			_ = rep.Send(zmq4.NewMsg(responseData))
+		}
+	}()
+
+	// CLI Interactivo en el main thread (igual que runCLIMonitor)
+	runInteractiveCLI(cfg, router)
+}
+
+// runInteractiveCLI ejecuta un CLI interactivo que lee comandos desde stdin
+func runInteractiveCLI(cfg config.CityConfig, router storage.Router) {
+	ctx := context.Background()
+	analyticsReq := zmq4.NewReq(ctx)
+	defer analyticsReq.Close()
+	if err := analyticsReq.Dial(cfg.Endpoints.AnalyticsREP); err != nil {
+		log.Fatalf("dial analytics rep: %v", err)
 	}
 
-	log.Printf("[monitor-aux] iniciado correctamente, esperando peticiones...")
-
+	scanner := bufio.NewScanner(os.Stdin)
 	for {
-		msg, err := rep.Recv()
-		if err != nil {
-			log.Printf("[monitor-aux] error recibiendo mensaje: %v", err)
+		fmt.Print("\n[monitor-aux-cli]> ")
+		if !scanner.Scan() {
+			break
+		}
+
+		input := strings.TrimSpace(scanner.Text())
+		if input == "" {
 			continue
 		}
 
-		if len(msg.Frames) == 0 {
-			_ = rep.Send(zmq4.NewMsgString(`{"success":false,"message":"empty request"}`))
-			continue
-		}
+		parts := strings.Fields(input)
+		action := parts[0]
 
-		var req model.MonitorRequest
-		if err := json.Unmarshal(msg.Frames[0], &req); err != nil {
-			log.Printf("[monitor-aux] error decodificando JSON: %v", err)
-			_ = rep.Send(zmq4.NewMsgString(`{"success":false,"message":"invalid json"}`))
-			continue
-		}
+		switch strings.ToLower(action) {
+		case "help":
+			fmt.Println(`
+Comandos disponibles:
+  current <intersection>          - Ver estado actual de una intersección
+  history <intersection>           - Ver histórico de una intersección
+  metric_count <intersection>      - Contar eventos en rango de tiempo
+  force_green <intersection>       - Forzar luz verde
+  force_green_wave <route>         - Forzar onda verde en ruta
+  restore_automatic <intersection> - Restaurar control automático
+  exit, quit                       - Salir
+  help                            - Ver este mensaje
+			`)
 
-		log.Printf("[monitor-aux] procesando acción: %s", req.Action)
+		case "exit", "quit":
+			fmt.Println("[monitor-aux-cli] Saliendo...")
+			return
 
-		// Procesar acción
-		var responseData []byte
-		var response model.MonitorResponse
-
-		switch strings.ToLower(req.Action) {
 		case "current":
-			data, err := router.QueryCurrent(req.Intersection)
-			if err != nil {
-				log.Printf("[monitor-aux] error en consulta current: %v", err)
-				response = model.MonitorResponse{Success: false, Message: fmt.Sprintf("error: %v", err)}
-			} else {
-				var result []model.IntersectionSnapshot
-				json.Unmarshal(data, &result)
-				response = model.MonitorResponse{Success: true, Message: "consulta puntual", Data: result}
+			if len(parts) < 2 {
+				fmt.Println("Uso: current <intersection>")
+				continue
 			}
+			intersection := parts[1]
+			data, err := router.QueryCurrent(intersection)
+			if err != nil {
+				fmt.Printf("Error: %v\n", err)
+			} else {
+				fmt.Printf("[monitor-aux-cli] %s\n", data)
+			}
+
 		case "history", "metric_count":
+			if len(parts) < 2 {
+				fmt.Printf("Uso: %s <intersection>\n", action)
+				continue
+			}
+			intersection := parts[1]
+			req := model.MonitorRequest{
+				Action:       action,
+				Intersection: intersection,
+				From:         time.Now().UTC().Add(-2 * time.Minute),
+				To:           time.Now().UTC(),
+				RequestedAt:  time.Now().UTC(),
+			}
 			body, _ := json.Marshal(req)
 			data, err := router.QueryHistory(body)
 			if err != nil {
-				log.Printf("[monitor-aux] error en consulta history/metric: %v", err)
-				response = model.MonitorResponse{Success: false, Message: fmt.Sprintf("error: %v", err)}
+				fmt.Printf("Error: %v\n", err)
 			} else {
-				var result interface{}
-				json.Unmarshal(data, &result)
-				response = model.MonitorResponse{Success: true, Message: "consulta procesada", Data: result}
+				fmt.Printf("[monitor-aux-cli] %s\n", data)
 			}
-		default:
-			log.Printf("[monitor-aux] acción no soportada: %s", req.Action)
-			response = model.MonitorResponse{Success: false, Message: "accion no soportada en monitor auxiliar"}
-		}
 
-		responseData, _ = json.Marshal(response)
-		_ = rep.Send(zmq4.NewMsg(responseData))
+		default:
+			// Enviar comando a analytics
+			req := model.MonitorRequest{
+				Action:       action,
+				Intersection: parts[len(parts)-1],
+				RequestedAt:  time.Now().UTC(),
+			}
+			body, _ := json.Marshal(req)
+			if err := analyticsReq.Send(zmq4.NewMsg(body)); err != nil {
+				fmt.Printf("Error enviando a analytics: %v\n", err)
+			} else {
+				msg, err := analyticsReq.Recv()
+				if err != nil {
+					fmt.Printf("Error recibiendo de analytics: %v\n", err)
+				} else if len(msg.Frames) > 0 {
+					fmt.Printf("[monitor-aux-cli] %s\n", msg.Frames[0])
+				}
+			}
+		}
 	}
 }
 
