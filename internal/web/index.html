@@ -1,69 +1,133 @@
 <!doctype html>
 <html lang="es">
-<head>
-  <meta charset="utf-8">
-  <title>Visualizador Trafico Urbano</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    body { font-family: Arial, sans-serif; margin: 0; background: #f5f7fb; color: #1f2937; }
-    header { background: #111827; color: white; padding: 16px 24px; }
-    main { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; padding: 16px; }
-    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-    .cell { background: white; border-radius: 10px; padding: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.08); min-height: 120px; }
-    .title { font-weight: 700; margin-bottom: 6px; }
-    .status { font-weight: 700; }
-    .light { display: inline-block; width: 10px; height: 10px; border-radius: 999px; margin-right: 6px; }
-    .VERTICAL_GREEN { background: #16a34a; }
-    .HORIZONTAL_GREEN { background: #2563eb; }
-    .NONE { background: #9ca3af; }
-    .NORMAL { color: #15803d; }
-    .CONGESTION { color: #b91c1c; }
-    .PRIORITY { color: #2563eb; }
-    .panel { background: white; border-radius: 10px; padding: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
-    ul { padding-left: 18px; }
-    code { background: #eef2ff; padding: 2px 6px; border-radius: 4px; }
-  </style>
-</head>
-<body>
-  <header>
-    <h1>PC1 - Visualizador en Tiempo Real</h1>
-    <div id="updated">Esperando eventos...</div>
-  </header>
-  <main>
-    <section class="grid" id="grid"></section>
-    <section class="panel">
-      <h2>Eventos recientes</h2>
-      <ul id="events"></ul>
-    </section>
-  </main>
-  <script>
-    const grid = document.getElementById("grid");
-    const eventsEl = document.getElementById("events");
-    const updatedEl = document.getElementById("updated");
-    const cells = new Map();
+  <head>
+    <meta charset="utf-8" />
+    <title>Visualizador Trafico Urbano</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        background: #f5f7fb;
+        color: #1f2937;
+      }
+      header {
+        background: #111827;
+        color: white;
+        padding: 16px 24px;
+      }
+      main {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 16px;
+        padding: 16px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+      }
+      .cell {
+        background: white;
+        border-radius: 10px;
+        padding: 12px;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+        min-height: 120px;
+      }
+      .title {
+        font-weight: 700;
+        margin-bottom: 6px;
+      }
+      .status {
+        font-weight: 700;
+      }
+      .light {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        margin-right: 6px;
+      }
+      .VERTICAL_GREEN {
+        background: #16a34a;
+      }
+      .HORIZONTAL_GREEN {
+        background: #2563eb;
+      }
+      .NONE {
+        background: #9ca3af;
+      }
+      .NORMAL {
+        color: #15803d;
+      }
+      .CONGESTION {
+        color: #b91c1c;
+      }
+      .CONGESTIONADO {
+        color: #b91c1c;
+      }
+      .FORCE_GREEN {
+        color: #0f766e;
+      }
+      .PRIORITY{
+        color: #2563eb;
+      }
+      .panel {
+        background: white;
+        border-radius: 10px;
+        padding: 12px;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+      }
+      ul {
+        padding-left: 18px;
+      }
+      code {
+        background: #eef2ff;
+        padding: 2px 6px;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>PC1 - Visualizador en Tiempo Real</h1>
+      <div id="updated">Esperando eventos...</div>
+    </header>
+    <main>
+      <section class="grid" id="grid"></section>
+      <section class="panel">
+        <h2>Eventos recientes</h2>
+        <ul id="events"></ul>
+      </section>
+    </main>
+    <script>
+      const grid = document.getElementById("grid");
+      const eventsEl = document.getElementById("events");
+      const updatedEl = document.getElementById("updated");
+      const cells = new Map();
 
-    async function loadState() {
-      const res = await fetch("/api/state");
-      const data = await res.json();
-      data.forEach(renderCell);
-    }
-
-    function describePhase(phase) {
-      if (phase === "VERTICAL_GREEN") return "Vertical verde / Horizontal rojo";
-      if (phase === "HORIZONTAL_GREEN") return "Horizontal verde / Vertical rojo";
-      return "Sin semaforo";
-    }
-
-    function renderCell(item) {
-      let el = cells.get(item.intersection);
-      if (!el) {
-        el = document.createElement("div");
-        el.className = "cell";
-        cells.set(item.intersection, el);
-        grid.appendChild(el);
+      async function loadState() {
+        const res = await fetch("/api/state");
+        const data = await res.json();
+        data.forEach(renderCell);
       }
 
-      el.innerHTML = `
+      function describePhase(phase) {
+        if (phase === "VERTICAL_GREEN") return "↓ ↓ ↓  Vertical verde";
+        if (phase === "HORIZONTAL_GREEN") return "→ → →  Horizontal verde";
+        return "Sin semáforo";
+      }
+
+      function renderCell(item) {
+        let el = cells.get(item.intersection);
+        if (!el) {
+          el = document.createElement("div");
+          el.className = "cell";
+          cells.set(item.intersection, el);
+          grid.appendChild(el);
+        }
+
+        el.innerHTML = `
         <div class="title">${item.intersection}</div>
         <div>Semaforo: ${item.has_semaphore ? `<span class="light ${item.light_state}"></span>${describePhase(item.light_state)}` : "No"}</div>
         <div>Q: <code>${item.queue_length}</code></div>
@@ -71,32 +135,31 @@
         <div>D: <code>${Number(item.density || 0).toFixed(1)}</code></div>
         <div class="status ${item.status || "NORMAL"}">${item.status || "NORMAL"}</div>
       `;
-    }
-
-    function addEvent(text) {
-      const li = document.createElement("li");
-      li.textContent = text;
-      eventsEl.prepend(li);
-      while (eventsEl.children.length > 12) {
-        eventsEl.removeChild(eventsEl.lastChild);
       }
-      updatedEl.textContent = "Ultima actualizacion: " + new Date().toLocaleTimeString();
-    }
 
-    loadState();
-
-    const source = new EventSource("/events");
-    source.onmessage = (event) => {
-      const payload = JSON.parse(event.data);
-      if (payload.snapshot) {
-        renderCell(payload.snapshot);
-        addEvent(`${payload.topic} -> ${payload.snapshot.intersection} (${payload.snapshot.status})`);
-      } else if (payload.light_state) {
-        addEvent(`${payload.topic} -> ${payload.light_state.intersection} = ${describePhase(payload.light_state.light_state)}`);
-      } else if (payload.light_command) {
-        addEvent(`${payload.topic} -> ${payload.light_command.intersection} => ${describePhase(payload.light_command.target_state)}`);
+      function addEvent(text) {
+        const li = document.createElement("li");
+        li.textContent = text;
+        eventsEl.prepend(li);
+        while (eventsEl.children.length > 12) {
+          eventsEl.removeChild(eventsEl.lastChild);
+        }
+        updatedEl.textContent =
+          "Ultima actualizacion: " + new Date().toLocaleTimeString();
       }
-    };
-  </script>
-</body>
+
+      loadState();
+
+      const source = new EventSource("/events");
+      source.onmessage = (event) => {
+        const payload = JSON.parse(event.data);
+        if (payload.snapshot) {
+          renderCell(payload.snapshot);
+          addEvent(
+            `${payload.topic} -> ${payload.snapshot.intersection} (${payload.snapshot.status || "NORMAL"})`,
+          );
+        }
+      };
+    </script>
+  </body>
 </html>

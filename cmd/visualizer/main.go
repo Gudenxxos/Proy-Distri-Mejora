@@ -102,6 +102,7 @@ func (v *visualizer) consumeBroker() {
 		payload := msg.Frames[1]
 
 		v.mu.Lock()
+		var updated *model.IntersectionSnapshot
 		// Procesar eventos de sensores para actualizar datos de intersecciones
 		switch topic {
 		case model.TopicCamera:
@@ -112,11 +113,7 @@ func (v *visualizer) consumeBroker() {
 				item.QueueLength = event.Volumen
 				item.AvgSpeed = event.VelocidadPromedio
 				v.state[event.Interseccion] = item
-
-				// Ejecutar lógica adicional solo si la intersección tiene un sensor configurado
-				if (item.QueueLength >= 8 || item.AvgSpeed < 20) && v.hasSensor(item.Intersection) {
-					item.Status = "CONGESTED"
-				}
+				updated = &item
 			}
 		case model.TopicGPS:
 			var event model.GPSEvent
@@ -126,10 +123,7 @@ func (v *visualizer) consumeBroker() {
 				item.Density = event.Densidad
 				item.AvgSpeed = event.VelocidadPromedio
 				v.state[event.Interseccion] = item
-				// Ejecutar lógica adicional solo si la intersección tiene un sensor configurado
-				if (item.Density >= 35 || item.AvgSpeed < 20) && v.hasSensor(item.Intersection) {
-					item.Status = "CONGESTED"
-				}
+				updated = &item
 			}
 		case model.TopicInductive:
 			var event model.InductiveEvent
@@ -138,13 +132,12 @@ func (v *visualizer) consumeBroker() {
 				item.Intersection = event.Interseccion
 				item.VehiclesCounted = event.VehiculosContados
 				v.state[event.Interseccion] = item
-				// Ejecutar lógica adicional solo si la intersección tiene un sensor configurado
-				if (item.VehiclesCounted >= 7) && v.hasSensor(item.Intersection) {
-					item.Status = "CONGESTED"
-				}
+				updated = &item
 			}
 		}
-		v.broadcast(payload, topic)
+		if updated != nil {
+			v.broadcastSnapshot(*updated, topic)
+		}
 		v.mu.Unlock()
 	}
 }
@@ -178,19 +171,45 @@ func (v *visualizer) consumeLightCommands() {
 		item := v.state[cmd.Intersection]
 		item.Intersection = cmd.Intersection
 		item.LightState = cmd.TargetState
-		item.Status = cmd.Reason
+		item.Status = v.statusFromReason(item.Status, cmd.Reason)
 		v.state[cmd.Intersection] = item
-		
-		// Enviar actualizaciones a clientes SSE
-		envelope := map[string]any{
-			"topic":        "light_command",
-			"light_command": cmd,
-		}
-		data, _ := json.Marshal(envelope)
-		v.broadcast(data, "light_command")
+
+		v.broadcastSnapshot(item, "light_command")
 		v.mu.Unlock()
 
 		log.Printf("[visualizer] actualizado %s => %s", cmd.Intersection, cmd.TargetState)
+	}
+}
+
+func (v *visualizer) broadcastSnapshot(snapshot model.IntersectionSnapshot, topic string) {
+	envelope := map[string]any{
+		"topic":    topic,
+		"snapshot": snapshot,
+	}
+	data, _ := json.Marshal(envelope)
+	for ch := range v.subs {
+		select {
+		case ch <- data:
+		default:
+		}
+	}
+}
+
+func (v *visualizer) statusFromReason(previous, reason string) string {
+	switch strings.ToLower(strings.TrimSpace(reason)) {
+	case "deteccion_congestion":
+		return "CONGESTION"
+	case "force_green":
+		return "PRIORITY"
+	case "ola_verde":
+		return "PRIORITY"
+	case "cycle_end":
+		if strings.TrimSpace(previous) != "" {
+			return previous
+		}
+		return "NORMAL"
+	default:
+		return "NORMAL"
 	}
 }
 
@@ -251,31 +270,7 @@ func (v *visualizer) handleEvents(w http.ResponseWriter, r *http.Request) {
 
 func (v *visualizer) broadcast(payload []byte, topic string) {
 	envelope := map[string]any{"topic": topic}
-	
-	// Manejar eventos de sensores
-	switch topic {
-	case model.TopicCamera:
-		var event model.CameraEvent
-		if json.Unmarshal(payload, &event) == nil {
-			envelope["camera_event"] = event
-		}
-	case model.TopicGPS:
-		var event model.GPSEvent
-		if json.Unmarshal(payload, &event) == nil {
-			envelope["gps_event"] = event
-		}
-	case model.TopicInductive:
-		var event model.InductiveEvent
-		if json.Unmarshal(payload, &event) == nil {
-			envelope["inductive_event"] = event
-		}
-	case "light_command":
-		var cmd model.LightCommand
-		if json.Unmarshal(payload, &cmd) == nil {
-			envelope["light_command"] = cmd
-		}
-	}
-	
+
 	data, _ := json.Marshal(envelope)
 	for ch := range v.subs {
 		select {
