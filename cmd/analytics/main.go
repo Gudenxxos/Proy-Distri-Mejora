@@ -43,6 +43,7 @@ type analyticsApp struct {
 	evaluator       analyticslogic.Evaluator
 	city            *model.City
 	mu              sync.Mutex
+	sendMu          sync.Mutex
 	isPc3Healthy    bool // Estado de salud del DB primario
 	pc3HealthMutex  sync.RWMutex
 	auxMonitorCmd   *os.Process // Proceso del monitor auxiliar
@@ -427,6 +428,14 @@ func (a *analyticsApp) handleRequest(req model.MonitorRequest, pushLights, pushP
 	switch strings.ToLower(req.Action) {
 	case "health":
 		return model.MonitorResponse{Success: true, Message: "analytics ok"}
+	case model.ActionForceGreen:
+		cmd, err := a.evaluator.BuildForceGreen(req.Intersection, req.DurationSec)
+		if err != nil {
+			return model.MonitorResponse{Success: false, Message: err.Error()}
+		}
+		log.Printf("[analytics] force_green %s -> %s por %ds", cmd.Intersection, cmd.TargetState, cmd.DurationSec)
+		a.sendLightCommand(cmd, pushLights, pushPrimary, pushReplica)
+		return model.MonitorResponse{Success: true, Message: "force_green aplicado", Data: cmd}
 	case "force_green_wave":
 		commands := a.evaluator.BuildPriorityWave(req.Route, a.city)
 		for _, cmd := range commands {
@@ -434,16 +443,21 @@ func (a *analyticsApp) handleRequest(req model.MonitorRequest, pushLights, pushP
 		}
 		return model.MonitorResponse{Success: true, Message: "ola verde aplicada", Data: commands}
 	case "restore_automatic":
-		targetPhase := model.PreferredPhaseForIntersectionID(req.Intersection)
+		intersection := strings.ToUpper(strings.TrimSpace(req.Intersection))
+		if current, ok := a.city.Get(intersection); !ok || !current.HasSemaphore {
+			return model.MonitorResponse{Success: false, Message: "intersection has no semaphore"}
+		}
+		targetPhase := model.PreferredPhaseForIntersectionID(intersection)
 		cmd := model.LightCommand{
 			CommandID:    commandID(),
-			Intersection: req.Intersection,
+			Intersection: intersection,
 			TargetState:  targetPhase,
 			DurationSec:  a.cfg.BaseGreenSeconds,
 			Reason:       analyticslogic.ReasonNormal,
 			RequestedBy:  analyticslogic.RequestMonitoring,
 			RequestedAt:  storage.NowStoreTime(),
 		}
+		log.Printf("[analytics] restore_automatic %s -> %s por %ds", cmd.Intersection, cmd.TargetState, cmd.DurationSec)
 		a.sendLightCommand(cmd, pushLights, pushPrimary, pushReplica)
 		return model.MonitorResponse{Success: true, Message: "modo automatico restaurado", Data: cmd}
 	default:
@@ -457,7 +471,9 @@ func (a *analyticsApp) sendLightCommand(cmd model.LightCommand, pushLights, push
 	cmd.ChangedAt = nil
 
 	data, _ := json.Marshal(cmd)
+	a.sendMu.Lock()
 	_ = pushLights.Send(zmq4.NewMsg(data))
+	a.sendMu.Unlock()
 }
 
 func (a *analyticsApp) persistSnapshot(snapshot model.IntersectionSnapshot, topic string, raw []byte, pushPrimary, pushReplica zmq4.Socket) {
@@ -473,6 +489,8 @@ func (a *analyticsApp) persistSnapshot(snapshot model.IntersectionSnapshot, topi
 
 func (a *analyticsApp) persistEnvelope(env model.PersistEnvelope, pushPrimary, pushReplica zmq4.Socket) {
 	data, _ := json.Marshal(env)
+	a.sendMu.Lock()
+	defer a.sendMu.Unlock()
 
 	// Circuit Breaker: si el primary está caído, solo enviar a replica
 	if a.IsPC3Healthy() {

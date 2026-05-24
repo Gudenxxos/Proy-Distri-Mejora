@@ -23,6 +23,7 @@ const (
 	ReasonNormal      = "trafico_normal"
 	ReasonCongestion  = "deteccion_congestion"
 	ReasonPriority    = "ola_verde"
+	ReasonForceGreen  = "force_green"
 	RequestAnalytics  = "analytics"
 	RequestMonitoring = "monitoring"
 )
@@ -174,4 +175,35 @@ func (e Evaluator) BuildPriorityWave(route string, city *model.City) []model.Lig
 	}
 
 	return commands
+}
+
+func (e Evaluator) BuildForceGreen(intersection string, durationSec int) (model.LightCommand, error) {
+	if durationSec <= 0 {
+		return model.LightCommand{}, fmt.Errorf("duracion invalida para force_green: %d", durationSec)
+	}
+	if !e.hasSemaphoreIntersection(intersection) {
+		return model.LightCommand{}, fmt.Errorf("intersection %s has no semaphore", intersection)
+	}
+
+	intersection = strings.ToUpper(strings.TrimSpace(intersection))
+
+	return model.LightCommand{
+		CommandID:    fmt.Sprintf("cmd-%d", time.Now().UnixNano()),
+		Intersection: intersection,
+		TargetState:  e.determinePhaseForIntersection(intersection),
+		DurationSec:  durationSec,
+		Reason:       ReasonForceGreen,
+		RequestedBy:  RequestMonitoring,
+		RequestedAt:  nowAnalyticsTime(),
+	}, nil
+}
+
+func (e Evaluator) hasSemaphoreIntersection(intersectionID string) bool {
+	intersectionID = strings.ToUpper(strings.TrimSpace(intersectionID))
+	for _, item := range e.cfg.Intersections {
+		if strings.ToUpper(strings.TrimSpace(item.ID)) == intersectionID {
+			return item.HasSemaphore
+		}
+	}
+	return false
 }

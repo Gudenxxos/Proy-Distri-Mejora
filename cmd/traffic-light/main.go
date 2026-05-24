@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -46,10 +48,9 @@ func main() {
 	app := &trafficLightApp{
 		cfg:             cfg,
 		states:          make(map[string]string),
+		timers:          make(map[string]*intersectionTimer),
 		pushExecuted:    pushExecuted,
 		pushVisualizer:  pushVisualizer,
-		globalCycleCh:   make(chan *globalCycleUpdate, 10),
-		stopGlobalTimer: make(chan struct{}),
 	}
 
 	// Inicializar estados de todos los semáforos
@@ -60,9 +61,6 @@ func main() {
 	}
 
 	log.Printf("[traffic-light] esperando comandos en %s", cfg.Endpoints.TrafficLightPull)
-
-	// Iniciar goroutine del timer global
-	go app.globalTimerLoop()
 
 	// Bucle principal de recepción de comandos
 	for {
@@ -84,140 +82,226 @@ func main() {
 	}
 }
 
-type globalCycleUpdate struct {
-	durationSec int
-	phaseEnd    time.Time
+type intersectionTimer struct {
+	resetCh chan int
+	stopCh  chan struct{}
 }
 
 type trafficLightApp struct {
 	cfg            config.CityConfig
 	states         map[string]string
-	mu             sync.RWMutex
+	stateMu        sync.RWMutex
+	timers         map[string]*intersectionTimer
+	timerMu        sync.Mutex
+	sendMu         sync.Mutex
 	pushExecuted   zmq4.Socket
 	pushVisualizer zmq4.Socket
-
-	// Global timer management
-	globalCycleCh   chan *globalCycleUpdate
-	stopGlobalTimer chan struct{}
-	globalEndTime   time.Time
-	globalMutex     sync.RWMutex
 }
 
 func (app *trafficLightApp) processCommand(cmd model.LightCommand) {
-	now := storage.NowStoreTime()
-
-	app.mu.Lock()
-	defer app.mu.Unlock()
-
-	// Actualizar TODAS las intersecciones con semáforo
-	for _, intersection := range app.cfg.Intersections {
-		if !intersection.HasSemaphore {
-			continue
-		}
-
-		// Cambiar estado interno
-		app.states[intersection.ID] = cmd.TargetState
-
-		// Crear comando específico para esta intersección
-		updatedCmd := model.LightCommand{
-			CommandID:    cmd.CommandID,
-			Intersection: intersection.ID,
-			TargetState:  cmd.TargetState,
-			DurationSec:  cmd.DurationSec,
-			Reason:       cmd.Reason,
-			RequestedBy:  cmd.RequestedBy,
-			RequestedAt:  cmd.RequestedAt,
-			ChangedAt:    &now,
-		}
-
-		// Serializar
-		cmdData, _ := json.Marshal(updatedCmd)
-
-		// Enviar a analytics
-		_ = app.pushExecuted.Send(zmq4.NewMsg(cmdData))
-
-		// Enviar al visualizer
-		_ = app.pushVisualizer.Send(zmq4.NewMsg(cmdData))
-
-		log.Printf(
-			"[traffic-light] %s -> %s por %s durante %ds",
-			intersection.ID,
-			cmd.TargetState,
-			cmd.Reason,
-			cmd.DurationSec,
-		)
+	intersection := normalizeIntersectionID(cmd.Intersection)
+	if !app.hasSemaphore(intersection) {
+		log.Printf("[traffic-light] ignorando comando para %s: no tiene semaforo", intersection)
+		return
 	}
 
-	// Actualizar ciclo global
-	app.globalCycleCh <- &globalCycleUpdate{
-		durationSec: cmd.DurationSec,
-		phaseEnd:    now.Add(time.Duration(cmd.DurationSec) * time.Second),
+	phase := strings.ToUpper(strings.TrimSpace(cmd.TargetState))
+	if phase != model.LightPhaseVertical && phase != model.LightPhaseHorizontal {
+		log.Printf("[traffic-light] ignorando comando invalido para %s: %s", intersection, cmd.TargetState)
+		return
+	}
+
+	duration := cmd.DurationSec
+	if duration <= 0 {
+		duration = app.cfg.BaseGreenSeconds
+	}
+
+	now := storage.NowStoreTime()
+	previous, err := app.setLightState(intersection, phase)
+	if err != nil {
+		log.Printf("[traffic-light] no se pudo aplicar comando en %s: %v", intersection, err)
+		return
+	}
+
+	executed := cmd
+	executed.Intersection = intersection
+	executed.TargetState = phase
+	executed.DurationSec = duration
+	executed.ChangedAt = &now
+	if executed.CommandID == "" {
+		executed.CommandID = commandID("cmd", intersection, now)
+	}
+	if executed.RequestedAt.IsZero() {
+		executed.RequestedAt = now
+	}
+	if executed.RequestedBy == "" {
+		executed.RequestedBy = "analytics"
+	}
+
+	app.emitLightCommand(executed)
+	log.Printf("[traffic-light] %s %s -> %s por %ds (reason=%s)", intersection, previous, phase, duration, executed.Reason)
+	app.resetTimer(intersection, duration)
+}
+
+func (app *trafficLightApp) resetTimer(intersection string, durationSec int) {
+	if durationSec <= 0 {
+		durationSec = app.cfg.BaseGreenSeconds
+	}
+
+	timer := app.ensureTimer(intersection)
+	select {
+	case timer.resetCh <- durationSec:
+	default:
+		select {
+		case <-timer.resetCh:
+		default:
+		}
+		timer.resetCh <- durationSec
 	}
 }
 
-// globalTimerLoop maneja un único timer global para todos los semáforos.
-// Cuando expira el ciclo, cambia todos los semáforos al estado opuesto.
-func (app *trafficLightApp) globalTimerLoop() {
-	ticker := time.NewTicker(100 * time.Millisecond) // Verificar cada 100ms
-	defer ticker.Stop()
+func (app *trafficLightApp) ensureTimer(intersection string) *intersectionTimer {
+	app.timerMu.Lock()
+	defer app.timerMu.Unlock()
 
-	var (
-		globalDuration = time.Duration(app.cfg.BaseGreenSeconds) * time.Second
-		globalEndTime  = time.Now().Add(globalDuration)
-	)
+	if timer, ok := app.timers[intersection]; ok {
+		return timer
+	}
+
+	timer := &intersectionTimer{
+		resetCh: make(chan int, 1),
+		stopCh:  make(chan struct{}),
+	}
+	app.timers[intersection] = timer
+	go app.runTimerLoop(intersection, timer)
+	return timer
+}
+
+func (app *trafficLightApp) runTimerLoop(intersection string, timer *intersectionTimer) {
+	var activeTimer *time.Timer
+	defer func() {
+		if activeTimer != nil && !activeTimer.Stop() {
+			select {
+			case <-activeTimer.C:
+			default:
+			}
+		}
+	}()
 
 	for {
+		var timerCh <-chan time.Time
+		if activeTimer != nil {
+			timerCh = activeTimer.C
+		}
+
 		select {
-		case <-app.stopGlobalTimer:
+		case <-timer.stopCh:
 			return
-		case update := <-app.globalCycleCh:
-			// Actualizar el tiempo final del ciclo global
-			globalEndTime = update.phaseEnd
-			globalDuration = time.Duration(update.durationSec) * time.Second
-			log.Printf("[traffic-light] Ciclo global actualizado: %ds", update.durationSec)
-		case <-ticker.C:
-			// Verificar si el ciclo global ha expirado
-			if time.Now().After(globalEndTime) {
-				app.cycleGlobalLights()
-				// Reiniciar con duración base
-				globalDuration = time.Duration(app.cfg.BaseGreenSeconds) * time.Second
-				globalEndTime = time.Now().Add(globalDuration)
+		case durationSec := <-timer.resetCh:
+			if durationSec <= 0 {
+				durationSec = app.cfg.BaseGreenSeconds
+			}
+			if activeTimer != nil && !activeTimer.Stop() {
+				select {
+				case <-activeTimer.C:
+				default:
+				}
+			}
+			activeTimer = time.NewTimer(time.Duration(durationSec) * time.Second)
+			log.Printf("[traffic-light] %s temporizador ajustado a %ds", intersection, durationSec)
+		case <-timerCh:
+			previous, next, ok := app.flipLightState(intersection)
+			if !ok {
+				continue
+			}
+
+			now := storage.NowStoreTime()
+			cmd := model.LightCommand{
+				CommandID:    commandID("cycle", intersection, now),
+				Intersection: intersection,
+				TargetState:  next,
+				DurationSec:  app.cfg.BaseGreenSeconds,
+				Reason:       "cycle_end",
+				RequestedBy:  "traffic_light",
+				RequestedAt:  now,
+				ChangedAt:    &now,
+			}
+
+			app.emitLightCommand(cmd)
+			log.Printf("[traffic-light] %s ciclo %s -> %s por %ds (reason=cycle_end)", intersection, previous, next, app.cfg.BaseGreenSeconds)
+
+			if activeTimer != nil {
+				activeTimer.Reset(time.Duration(app.cfg.BaseGreenSeconds) * time.Second)
 			}
 		}
 	}
 }
 
-// cycleGlobalLights cambia todos los semáforos al estado opuesto cuando expira el ciclo.
-func (app *trafficLightApp) cycleGlobalLights() {
-	app.mu.Lock()
-	defer app.mu.Unlock()
+func (app *trafficLightApp) emitLightCommand(cmd model.LightCommand) {
+	data, _ := json.Marshal(cmd)
 
-	now := storage.NowStoreTime()
-	for intersectionID, currentPhase := range app.states {
-		nextPhase := model.OppositePhase(currentPhase)
-		if nextPhase == "" {
-			continue // No cambiar si es NONE
-		}
+	app.sendMu.Lock()
+	defer app.sendMu.Unlock()
 
-		app.states[intersectionID] = nextPhase
-
-		// Crear evento de cambio de ciclo
-		cmd := model.LightCommand{
-			CommandID:    "cycle-" + now.Format("20060102150405.000000000"),
-			Intersection: intersectionID,
-			TargetState:  nextPhase,
-			Reason:       "cycle_end",
-			RequestedBy:  "traffic_light",
-			RequestedAt:  now,
-			ChangedAt:    &now,
-		}
-
-		// Enviar al visualizer
-		cmdData, _ := json.Marshal(cmd)
-		_ = app.pushVisualizer.Send(zmq4.NewMsg(cmdData))
-
-		log.Printf("[traffic-light] %s ciclo auto: %s -> %s", intersectionID, currentPhase, nextPhase)
+	if err := app.pushExecuted.Send(zmq4.NewMsg(data)); err != nil {
+		log.Printf("[traffic-light] error enviando comando ejecutado: %v", err)
 	}
+	if err := app.pushVisualizer.Send(zmq4.NewMsg(data)); err != nil {
+		log.Printf("[traffic-light] error enviando comando al visualizer: %v", err)
+	}
+}
+
+func (app *trafficLightApp) setLightState(intersection, phase string) (string, error) {
+	phase = strings.ToUpper(strings.TrimSpace(phase))
+	if phase != model.LightPhaseVertical && phase != model.LightPhaseHorizontal {
+		return "", fmt.Errorf("invalid light phase %s", phase)
+	}
+	if !app.hasSemaphore(intersection) {
+		return "", fmt.Errorf("intersection %s has no semaphore", intersection)
+	}
+
+	app.stateMu.Lock()
+	defer app.stateMu.Unlock()
+
+	previous := app.states[intersection]
+	app.states[intersection] = phase
+	return previous, nil
+}
+
+func (app *trafficLightApp) flipLightState(intersection string) (string, string, bool) {
+	if !app.hasSemaphore(intersection) {
+		return "", "", false
+	}
+
+	app.stateMu.Lock()
+	defer app.stateMu.Unlock()
+
+	previous := app.states[intersection]
+	next := model.OppositePhase(previous)
+	if next == model.LightPhaseNone {
+		return previous, "", false
+	}
+
+	app.states[intersection] = next
+	return previous, next, true
+}
+
+func (app *trafficLightApp) hasSemaphore(intersection string) bool {
+	intersection = normalizeIntersectionID(intersection)
+	for _, item := range app.cfg.Intersections {
+		if normalizeIntersectionID(item.ID) == intersection {
+			return item.HasSemaphore
+		}
+	}
+	return false
+}
+
+func normalizeIntersectionID(intersection string) string {
+	return strings.ToUpper(strings.TrimSpace(intersection))
+}
+
+func commandID(prefix, intersection string, now time.Time) string {
+	return fmt.Sprintf("%s-%s-%s", prefix, normalizeIntersectionID(intersection), now.Format("20060102150405.000000000"))
 }
 
 func getenv(key, fallback string) string {

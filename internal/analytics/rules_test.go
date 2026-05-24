@@ -46,3 +46,29 @@ func TestBuildPriorityWave(t *testing.T) {
 		t.Fatalf("expected horizontal phase for route B, got %s", commands[0].TargetState)
 	}
 }
+
+func TestBuildForceGreen(t *testing.T) {
+	e := NewEvaluator(config.CityConfig{
+		Intersections: []config.IntersectionConfig{
+			{ID: "INT_B3", Row: "B", Col: 3, HasSemaphore: true},
+			{ID: "INT_A1", Row: "A", Col: 1, HasSemaphore: false},
+		},
+	})
+
+	cmd, err := e.BuildForceGreen("INT_B3", 12)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cmd.Intersection != "INT_B3" {
+		t.Fatalf("unexpected intersection: %s", cmd.Intersection)
+	}
+	if cmd.DurationSec != 12 {
+		t.Fatalf("unexpected duration: %d", cmd.DurationSec)
+	}
+	if cmd.TargetState != model.LightPhaseHorizontal {
+		t.Fatalf("unexpected phase: %s", cmd.TargetState)
+	}
+	if cmd.Reason != ReasonForceGreen {
+		t.Fatalf("unexpected reason: %s", cmd.Reason)
+	}
+}

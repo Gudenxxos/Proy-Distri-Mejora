@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -58,7 +59,7 @@ func runAuxiliaryMonitor(cfg config.CityConfig) {
 
 func runCLIMonitor(cfg config.CityConfig) {
 	var (
-		action       = flag.String("action", "", "Accion: health, current, history, force_green_wave, restore_automatic, metric_count")
+		action       = flag.String("action", "", "Accion: health, current, history, force_green, force_green_wave, restore_automatic, metric_count")
 		intersection = flag.String("intersection", "INT_B3", "Interseccion objetivo")
 		route        = flag.String("route", "B", "Ruta priorizada")
 		duration     = flag.Int("duration", 20, "Duracion en segundos")
@@ -142,21 +143,34 @@ func parseConsoleCommand(line string) (model.MonitorRequest, bool, bool) {
 			fmt.Println("Uso: current <intersection>")
 			return req, false, false
 		}
-		req.Intersection = parts[1]
+		req.Intersection = strings.ToUpper(strings.TrimSpace(parts[1]))
+		return req, false, true
+	case model.ActionForceGreen:
+		if len(parts) < 3 {
+			fmt.Println("Uso: force_green <intersection> <duration_sec>")
+			return req, false, false
+		}
+		duration, err := strconv.Atoi(parts[2])
+		if err != nil || duration <= 0 {
+			fmt.Println("Uso: force_green <intersection> <duration_sec>")
+			return req, false, false
+		}
+		req.Intersection = strings.ToUpper(strings.TrimSpace(parts[1]))
+		req.DurationSec = duration
 		return req, false, true
 	case "force_green_wave":
 		if len(parts) < 2 {
 			fmt.Println("Uso: force_green_wave <route>")
 			return req, false, false
 		}
-		req.Route = parts[1]
+		req.Route = strings.ToUpper(strings.TrimSpace(parts[1]))
 		return req, false, true
 	case "restore_automatic":
 		if len(parts) < 2 {
 			fmt.Println("Uso: restore_automatic <intersection>")
 			return req, false, false
 		}
-		req.Intersection = parts[1]
+		req.Intersection = strings.ToUpper(strings.TrimSpace(parts[1]))
 		return req, false, true
 	default:
 		fmt.Printf("Comando no soportado: %s. Escribe 'help' para ver opciones.\n", parts[0])
@@ -208,6 +222,7 @@ func printConsoleHelp() {
 	fmt.Println(`Comandos disponibles:
   health
   current <intersection>
+	force_green <intersection> <duration_sec>
   history
   metric_count
   force_green_wave <route>

@@ -9,6 +9,7 @@ const (
 	TopicSnapshot   = "traffic.snapshot"
 	TopicCommand    = "traffic.command"
 	TopicLightState = "traffic.lightstate"
+	ActionForceGreen = "force_green"
 
 	LightPhaseVertical   = "VERTICAL_GREEN"
 	LightPhaseHorizontal = "HORIZONTAL_GREEN"
