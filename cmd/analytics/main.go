@@ -9,7 +9,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/go-zeromq/zmq4"
@@ -215,20 +214,18 @@ func (a *analyticsApp) startAuxMonitor() {
 	var cmd *exec.Cmd
 
 	if runtime.GOOS == "windows" {
-		// Windows: Lanzar PowerShell en una terminal separada (CREATE_NEW_CONSOLE)
-		// para poder capturar y terminar el proceso
+		// Windows: abrir una terminal nueva y definir AUX dentro de esa terminal.
 		cmd = exec.Command(
+			"cmd.exe",
+			"/c",
+			"start",
+			"Monitor Auxiliar",
 			"powershell.exe",
 			"-NoProfile",
 			"-NoExit",
 			"-Command",
 			`$env:AUX='true'; $env:CITY_CONFIG='configs\city.json'; & '.\monitor.exe'`,
 		)
-		// Crear una nueva consola para que se abra en ventana separada
-		// CREATE_NEW_CONSOLE = 0x00000100 en Windows
-		cmd.SysProcAttr = &syscall.SysProcAttr{
-			CreationFlags: 0x00000100,
-		}
 	} else {
 		// Linux/macOS: Lanzar en segundo plano con AUX=true
 		cmd = exec.Command(
@@ -243,8 +240,13 @@ func (a *analyticsApp) startAuxMonitor() {
 		return
 	}
 
+	if runtime.GOOS == "windows" {
+		log.Printf("[analytics] Monitor Auxiliar lanzado en terminal separada")
+		return
+	}
+
 	a.auxMonitorCmd = cmd.Process
-	log.Printf("[analytics] Monitor Auxiliar iniciado (PID: %d) en ventana separada", a.auxMonitorCmd.Pid)
+	log.Printf("[analytics] Monitor Auxiliar iniciado (PID: %d)", a.auxMonitorCmd.Pid)
 
 	// Monitorear el proceso en segundo plano
 	go func() {
@@ -260,7 +262,7 @@ func (a *analyticsApp) startAuxMonitor() {
 	}()
 }
 
-// stopAuxMonitor termina el proceso del monitor auxiliar y cierra su ventana
+// stopAuxMonitor termina el proceso del monitor auxiliar
 func (a *analyticsApp) stopAuxMonitor() {
 	a.auxMonitorMutex.Lock()
 	defer a.auxMonitorMutex.Unlock()
@@ -269,14 +271,11 @@ func (a *analyticsApp) stopAuxMonitor() {
 		return
 	}
 
-	log.Printf("[analytics] Terminando Monitor Auxiliar (PID: %d) y cerrando su ventana...", a.auxMonitorCmd.Pid)
+	log.Printf("[analytics] Terminando Monitor Auxiliar (PID: %d)...", a.auxMonitorCmd.Pid)
 	if err := a.auxMonitorCmd.Kill(); err != nil {
 		log.Printf("[analytics] Error terminando Monitor Auxiliar: %v", err)
-		return
 	}
-	
-	// El auxMonitorCmd se pondrá a nil cuando cmd.Wait() retorne en el goroutine
-	// No lo marcamos como nil aquí para evitar race conditions
+	a.auxMonitorCmd = nil
 }
 
 // IsPC3Healthy retorna el estado actual del DB primario de manera thread-safe.
