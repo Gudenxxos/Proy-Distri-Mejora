@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,25 +26,22 @@ func main() {
 		log.Fatalf("load config: %v", err)
 	}
 
-	// Verificar si se ejecuta en modo auxiliar
 	auxEnvValue := strings.TrimSpace(getenv("AUX", "false"))
 	isAux := strings.EqualFold(auxEnvValue, "true")
 
 	log.Printf("[monitor] Iniciando con AUX=%s (modo=%s)", auxEnvValue, map[bool]string{true: "AUXILIAR", false: "CLI"}[isAux])
 
 	if isAux {
-		// Modo Auxiliar: Levantarse como servidor REP que consulta la replica
 		log.Printf("[monitor] Entrando en modo AUXILIAR")
 		runAuxiliaryMonitor(cfg)
-	} else {
-		// Modo CLI: Comportamiento original
-		log.Printf("[monitor] Entrando en modo CLI")
-		runCLIMonitor(cfg)
+		return
 	}
+
+	log.Printf("[monitor] Entrando en modo CLI")
+	runCLIMonitor(cfg)
 }
 
-// runAuxiliaryMonitor levanta el monitor en modo servidor auxiliar
-// Escucha en MonitorAuxiliar Y mantiene un CLI interactivo
+// runAuxiliaryMonitor levanta un servidor REP para analytics y tambien deja un CLI local disponible.
 func runAuxiliaryMonitor(cfg config.CityConfig) {
 	if cfg.Endpoints.MonitorAuxiliar == "" {
 		log.Fatalf("[monitor-aux] MonitorAuxiliar endpoint no configurado")
@@ -52,213 +50,101 @@ func runAuxiliaryMonitor(cfg config.CityConfig) {
 	log.Printf("[monitor-aux] iniciando modo auxiliar en endpoint: %s", cfg.Endpoints.MonitorAuxiliar)
 	log.Printf("[monitor-aux] consultando desde DB Replica: %s", cfg.Endpoints.DBReplicaREP)
 
-	ctx := context.Background()
-
-	// Router que consulta solo la réplica
 	router := storage.Router{
-		Primary: newDBClient(cfg.Endpoints.DBReplicaREP), // Usar replica como primary
+		Primary: newDBClient(cfg.Endpoints.DBReplicaREP),
 		Replica: newDBClient(cfg.Endpoints.DBReplicaREP),
 	}
 
-	// Inicializar socket REP y escuchar en goroutine
-	var rep zmq4.Socket
-	var err error
-	for attempts := 0; attempts < 3; attempts++ {
-		rep = zmq4.NewRep(ctx)
-		if err := rep.Listen(cfg.Endpoints.MonitorAuxiliar); err == nil {
-			log.Printf("[monitor-aux] escuchando exitosamente en %s (intento %d)", cfg.Endpoints.MonitorAuxiliar, attempts+1)
-			break
+	rep := listenAuxiliarySocket(cfg.Endpoints.MonitorAuxiliar)
+	defer rep.Close()
+
+	go serveAuxiliaryRequests(rep, &router)
+
+	analyticsReq := dialAnalytics(cfg.Endpoints.AnalyticsREP)
+	defer analyticsReq.Close()
+
+	fmt.Println("[monitor-aux] listo. Escribe 'help' para ver comandos.")
+	runConsoleLoop("[monitor-aux-cli]", &router, analyticsReq)
+}
+
+func listenAuxiliarySocket(endpoint string) zmq4.Socket {
+	ctx := context.Background()
+
+	var lastErr error
+	for attempts := 1; attempts <= 3; attempts++ {
+		rep := zmq4.NewRep(ctx)
+		if err := rep.Listen(endpoint); err == nil {
+			log.Printf("[monitor-aux] escuchando exitosamente en %s (intento %d)", endpoint, attempts)
+			return rep
 		} else {
-			log.Printf("[monitor-aux] fallo al escuchar (intento %d): %v", attempts+1, err)
+			lastErr = err
+			log.Printf("[monitor-aux] fallo al escuchar (intento %d): %v", attempts, err)
 			rep.Close()
-			if attempts < 2 {
+			if attempts < 3 {
 				time.Sleep(500 * time.Millisecond)
 			}
 		}
 	}
-	if err != nil {
-		log.Fatalf("[monitor-aux] no se pudo escuchar en %s después de reintentos", cfg.Endpoints.MonitorAuxiliar)
-	}
-	defer rep.Close()
 
-	log.Printf("[monitor-aux] iniciado correctamente, esperando peticiones en background...")
-	log.Printf("[monitor-aux] CLI también disponible (escribe comandos o 'help' para ver opciones)\n")
-
-	// Lanzar servidor REP en goroutine
-	go func() {
-		for {
-			msg, err := rep.Recv()
-			if err != nil {
-				log.Printf("[monitor-aux] error recibiendo mensaje: %v", err)
-				continue
-			}
-
-			if len(msg.Frames) == 0 {
-				_ = rep.Send(zmq4.NewMsgString(`{"success":false,"message":"empty request"}`))
-				continue
-			}
-
-			var req model.MonitorRequest
-			if err := json.Unmarshal(msg.Frames[0], &req); err != nil {
-				log.Printf("[monitor-aux] error decodificando JSON: %v", err)
-				_ = rep.Send(zmq4.NewMsgString(`{"success":false,"message":"invalid json"}`))
-				continue
-			}
-
-			log.Printf("[monitor-aux] procesando acción: %s", req.Action)
-
-			// Procesar acción
-			var response model.MonitorResponse
-
-			switch strings.ToLower(req.Action) {
-			case "current":
-				data, err := router.QueryCurrent(req.Intersection)
-				if err != nil {
-					log.Printf("[monitor-aux] error en consulta current: %v", err)
-					response = model.MonitorResponse{Success: false, Message: fmt.Sprintf("error: %v", err)}
-				} else {
-					var result []model.IntersectionSnapshot
-					json.Unmarshal(data, &result)
-					response = model.MonitorResponse{Success: true, Message: "consulta puntual", Data: result}
-				}
-			case "history", "metric_count":
-				body, _ := json.Marshal(req)
-				data, err := router.QueryHistory(body)
-				if err != nil {
-					log.Printf("[monitor-aux] error en consulta history/metric: %v", err)
-					response = model.MonitorResponse{Success: false, Message: fmt.Sprintf("error: %v", err)}
-				} else {
-					var result interface{}
-					json.Unmarshal(data, &result)
-					response = model.MonitorResponse{Success: true, Message: "consulta procesada", Data: result}
-				}
-			default:
-				log.Printf("[monitor-aux] acción no soportada: %s", req.Action)
-				response = model.MonitorResponse{Success: false, Message: "accion no soportada en monitor auxiliar"}
-			}
-
-			responseData, _ := json.Marshal(response)
-			_ = rep.Send(zmq4.NewMsg(responseData))
-		}
-	}()
-
-	// CLI Interactivo en el main thread (igual que runCLIMonitor)
-	runInteractiveCLI(cfg, router)
+	log.Fatalf("[monitor-aux] no se pudo escuchar en %s: %v", endpoint, lastErr)
+	return nil
 }
 
-// runInteractiveCLI ejecuta un CLI interactivo que lee comandos desde stdin
-func runInteractiveCLI(cfg config.CityConfig, router storage.Router) {
-	ctx := context.Background()
-	analyticsReq := zmq4.NewReq(ctx)
-	defer analyticsReq.Close()
-	if err := analyticsReq.Dial(cfg.Endpoints.AnalyticsREP); err != nil {
-		log.Fatalf("dial analytics rep: %v", err)
-	}
+func serveAuxiliaryRequests(rep zmq4.Socket, router *storage.Router) {
+	log.Printf("[monitor-aux] esperando peticiones de analytics...")
 
-	scanner := bufio.NewScanner(os.Stdin)
 	for {
-		fmt.Print("\n[monitor-aux-cli]> ")
-		if !scanner.Scan() {
-			break
-		}
-
-		input := strings.TrimSpace(scanner.Text())
-		if input == "" {
+		msg, err := rep.Recv()
+		if err != nil {
+			log.Printf("[monitor-aux] error recibiendo mensaje: %v", err)
 			continue
 		}
 
-		parts := strings.Fields(input)
-		action := parts[0]
-
-		switch strings.ToLower(action) {
-		case "help":
-			fmt.Println(`
-Comandos disponibles:
-  current <intersection>          - Ver estado actual de una intersección
-  history <intersection>           - Ver histórico de una intersección
-  metric_count <intersection>      - Contar eventos en rango de tiempo
-  force_green <intersection>       - Forzar luz verde
-  force_green_wave <route>         - Forzar onda verde en ruta
-  restore_automatic <intersection> - Restaurar control automático
-  exit, quit                       - Salir
-  help                            - Ver este mensaje
-			`)
-
-		case "exit", "quit":
-			fmt.Println("[monitor-aux-cli] Saliendo...")
-			return
-
-		case "current":
-			if len(parts) < 2 {
-				fmt.Println("Uso: current <intersection>")
-				continue
-			}
-			intersection := parts[1]
-			data, err := router.QueryCurrent(intersection)
-			if err != nil {
-				fmt.Printf("Error: %v\n", err)
-			} else {
-				fmt.Printf("[monitor-aux-cli] %s\n", data)
-			}
-
-		case "history", "metric_count":
-			if len(parts) < 2 {
-				fmt.Printf("Uso: %s <intersection>\n", action)
-				continue
-			}
-			intersection := parts[1]
-			req := model.MonitorRequest{
-				Action:       action,
-				Intersection: intersection,
-				From:         time.Now().UTC().Add(-2 * time.Minute),
-				To:           time.Now().UTC(),
-				RequestedAt:  time.Now().UTC(),
-			}
-			body, _ := json.Marshal(req)
-			data, err := router.QueryHistory(body)
-			if err != nil {
-				fmt.Printf("Error: %v\n", err)
-			} else {
-				fmt.Printf("[monitor-aux-cli] %s\n", data)
-			}
-
-		default:
-			// Enviar comando a analytics
-			req := model.MonitorRequest{
-				Action:       action,
-				Intersection: parts[len(parts)-1],
-				RequestedAt:  time.Now().UTC(),
-			}
-			body, _ := json.Marshal(req)
-			if err := analyticsReq.Send(zmq4.NewMsg(body)); err != nil {
-				fmt.Printf("Error enviando a analytics: %v\n", err)
-			} else {
-				msg, err := analyticsReq.Recv()
-				if err != nil {
-					fmt.Printf("Error recibiendo de analytics: %v\n", err)
-				} else if len(msg.Frames) > 0 {
-					fmt.Printf("[monitor-aux-cli] %s\n", msg.Frames[0])
-				}
-			}
-		}
+		response := handleAuxiliaryMessage(msg, router)
+		data, _ := json.Marshal(response)
+		_ = rep.Send(zmq4.NewMsg(data))
 	}
 }
 
-// runCLIMonitor ejecuta el monitor en modo CLI interactivo
+func handleAuxiliaryMessage(msg zmq4.Msg, router *storage.Router) model.MonitorResponse {
+	if len(msg.Frames) == 0 {
+		return model.MonitorResponse{Success: false, Message: "empty request"}
+	}
+
+	var req model.MonitorRequest
+	if err := json.Unmarshal(msg.Frames[0], &req); err != nil {
+		log.Printf("[monitor-aux] error decodificando JSON: %v", err)
+		return model.MonitorResponse{Success: false, Message: "invalid json"}
+	}
+
+	log.Printf("[monitor-aux] procesando accion: %s", req.Action)
+
+	switch strings.ToLower(req.Action) {
+	case "current":
+		data, err := router.QueryCurrent(req.Intersection)
+		if err != nil {
+			return model.MonitorResponse{Success: false, Message: err.Error()}
+		}
+
+		var result []model.IntersectionSnapshot
+		_ = json.Unmarshal(data, &result)
+		return model.MonitorResponse{Success: true, Message: "consulta puntual", Data: result}
+	case "history", "metric_count":
+		body, _ := json.Marshal(req)
+		data, err := router.QueryHistory(body)
+		if err != nil {
+			return model.MonitorResponse{Success: false, Message: err.Error()}
+		}
+
+		var result any
+		_ = json.Unmarshal(data, &result)
+		return model.MonitorResponse{Success: true, Message: "consulta procesada", Data: result}
+	default:
+		return model.MonitorResponse{Success: false, Message: "accion no soportada en monitor auxiliar"}
+	}
+}
+
 func runCLIMonitor(cfg config.CityConfig) {
-	ctx := context.Background()
-	analyticsReq := zmq4.NewReq(ctx)
-	defer analyticsReq.Close()
-	if err := analyticsReq.Dial(cfg.Endpoints.AnalyticsREP); err != nil {
-		log.Fatalf("dial analytics rep: %v", err)
-	}
-
-	router := storage.Router{
-		Primary: newDBClient(cfg.Endpoints.DBPrimaryREP),
-		Replica: newDBClient(cfg.Endpoints.DBReplicaREP),
-	}
-
-	// Parsear flags para ejecución única (opcional)
 	var (
 		action       = flag.String("action", "", "Accion: health, current, history, force_green, force_green_wave, restore_automatic, metric_count")
 		intersection = flag.String("intersection", "INT_B3", "Interseccion objetivo")
@@ -267,160 +153,180 @@ func runCLIMonitor(cfg config.CityConfig) {
 	)
 	flag.Parse()
 
-	// Si se proporciona acción por flag, ejecutarla y luego pasar a CLI interactivo
+	analyticsReq := dialAnalytics(cfg.Endpoints.AnalyticsREP)
+	defer analyticsReq.Close()
+
+	router := storage.Router{
+		Primary: newDBClient(cfg.Endpoints.DBPrimaryREP),
+		Replica: newDBClient(cfg.Endpoints.DBReplicaREP),
+	}
+
 	if *action != "" {
-		executeMonitorAction(*action, *intersection, *route, *duration, &router, analyticsReq)
-	}
-
-	// CLI Interactivo
-	fmt.Println("\n[monitor-cli] Entrando en modo interactivo. Escribe 'help' para ver comandos.")
-	fmt.Println("[monitor-cli] Escribe 'exit' para salir.")
-
-	runMonitorInteractiveCLI(cfg, &router, analyticsReq)
-}
-
-// executeMonitorAction ejecuta una acción individual del monitor
-func executeMonitorAction(action, intersection, route string, duration int, router *storage.Router, analyticsReq zmq4.Socket) {
-	switch action {
-	case "current":
-		data, err := router.QueryCurrent(intersection)
-		if err != nil {
-			log.Printf("[monitor] Error: %v", err)
-		} else {
-			log.Printf("[monitor] %s", data)
-		}
-	case "history", "metric_count":
 		req := model.MonitorRequest{
-			Action:       action,
-			Intersection: intersection,
+			Action:       *action,
+			Intersection: *intersection,
+			Route:        *route,
+			DurationSec:  *duration,
 			From:         time.Now().UTC().Add(-2 * time.Minute),
 			To:           time.Now().UTC(),
 			RequestedAt:  time.Now().UTC(),
 		}
-		body, _ := json.Marshal(req)
-		data, err := router.QueryHistory(body)
-		if err != nil {
-			log.Printf("[monitor] Error: %v", err)
-		} else {
-			log.Printf("[monitor] %s", data)
-		}
-	default:
-		req := model.MonitorRequest{
-			Action:       action,
-			Intersection: intersection,
-			Route:        route,
-			DurationSec:  duration,
-			From:         time.Now().UTC().Add(-2 * time.Minute),
-			To:           time.Now().UTC(),
-			RequestedAt:  time.Now().UTC(),
-		}
-		body, _ := json.Marshal(req)
-		if err := analyticsReq.Send(zmq4.NewMsg(body)); err != nil {
-			log.Fatalf("send analytics request: %v", err)
-		}
-		msg, err := analyticsReq.Recv()
-		if err != nil {
-			log.Fatalf("recv analytics response: %v", err)
-		}
-		if len(msg.Frames) > 0 {
-			log.Printf("[monitor] %s", msg.Frames[0])
-		}
+		executeMonitorRequest("[monitor]", &router, analyticsReq, req)
 	}
+
+	fmt.Println("[monitor-cli] Modo interactivo. Escribe 'help' para ver comandos.")
+	runConsoleLoop("[monitor-cli]", &router, analyticsReq)
 }
 
-// runMonitorInteractiveCLI ejecuta el CLI interactivo del monitor
-func runMonitorInteractiveCLI(cfg config.CityConfig, router *storage.Router, analyticsReq zmq4.Socket) {
+func runConsoleLoop(prefix string, router *storage.Router, analyticsReq zmq4.Socket) {
 	scanner := bufio.NewScanner(os.Stdin)
+
 	for {
-		fmt.Print("[monitor-cli]> ")
+		fmt.Printf("%s> ", prefix)
 		if !scanner.Scan() {
-			break
+			fmt.Println()
+			return
 		}
 
-		input := strings.TrimSpace(scanner.Text())
-		if input == "" {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
 			continue
 		}
 
-		parts := strings.Fields(input)
-		action := parts[0]
-
-		switch strings.ToLower(action) {
-		case "help":
-			fmt.Println(`
-Comandos disponibles:
-  current <intersection>          - Ver estado actual de una intersección
-  history <intersection>           - Ver histórico de una intersección
-  metric_count <intersection>      - Contar eventos en rango de tiempo
-  force_green <intersection>       - Forzar luz verde
-  force_green_wave <route>         - Forzar onda verde en ruta
-  restore_automatic <intersection> - Restaurar control automático
-  health                          - Chequear salud del sistema
-  exit, quit                       - Salir
-  help                            - Ver este mensaje
-			`)
-
-		case "exit", "quit":
-			fmt.Println("[monitor-cli] Saliendo...")
+		req, exit, ok := parseConsoleCommand(line)
+		if exit {
+			fmt.Printf("%s Saliendo...\n", prefix)
 			return
-
-		case "current":
-			if len(parts) < 2 {
-				fmt.Println("Uso: current <intersection>")
-				continue
-			}
-			intersection := parts[1]
-			data, err := router.QueryCurrent(intersection)
-			if err != nil {
-				fmt.Printf("Error: %v\n", err)
-			} else {
-				fmt.Printf("[monitor-cli] %s\n", data)
-			}
-
-		case "history", "metric_count":
-			if len(parts) < 2 {
-				fmt.Printf("Uso: %s <intersection>\n", action)
-				continue
-			}
-			intersection := parts[1]
-			req := model.MonitorRequest{
-				Action:       action,
-				Intersection: intersection,
-				From:         time.Now().UTC().Add(-2 * time.Minute),
-				To:           time.Now().UTC(),
-				RequestedAt:  time.Now().UTC(),
-			}
-			body, _ := json.Marshal(req)
-			data, err := router.QueryHistory(body)
-			if err != nil {
-				fmt.Printf("Error: %v\n", err)
-			} else {
-				fmt.Printf("[monitor-cli] %s\n", data)
-			}
-
-		default:
-			// Enviar comando a analytics (force_green, force_green_wave, restore_automatic, health, etc.)
-			lastPart := parts[len(parts)-1]
-			req := model.MonitorRequest{
-				Action:       action,
-				Intersection: lastPart,
-				Route:        lastPart,
-				DurationSec:  20,
-				RequestedAt:  time.Now().UTC(),
-			}
-			body, _ := json.Marshal(req)
-			if err := analyticsReq.Send(zmq4.NewMsg(body)); err != nil {
-				fmt.Printf("Error enviando a analytics: %v\n", err)
-			} else {
-				msg, err := analyticsReq.Recv()
-				if err != nil {
-					fmt.Printf("Error recibiendo de analytics: %v\n", err)
-				} else if len(msg.Frames) > 0 {
-					fmt.Printf("[monitor-cli] %s\n", msg.Frames[0])
-				}
-			}
 		}
+		if !ok {
+			continue
+		}
+
+		executeMonitorRequest(prefix, router, analyticsReq, req)
 	}
+}
+
+func parseConsoleCommand(line string) (model.MonitorRequest, bool, bool) {
+	parts := strings.Fields(line)
+	action := strings.ToLower(parts[0])
+
+	req := model.MonitorRequest{
+		Action:      action,
+		From:        time.Now().UTC().Add(-2 * time.Minute),
+		To:          time.Now().UTC(),
+		RequestedAt: time.Now().UTC(),
+	}
+
+	switch action {
+	case "help":
+		printConsoleHelp()
+		return req, false, false
+	case "exit", "quit":
+		return req, true, false
+	case "health", "history", "metric_count":
+		return req, false, true
+	case "current":
+		if len(parts) < 2 {
+			fmt.Println("Uso: current <intersection>")
+			return req, false, false
+		}
+		req.Intersection = parts[1]
+		return req, false, true
+	case "force_green":
+		if len(parts) < 2 {
+			fmt.Println("Uso: force_green <intersection> [duration_sec]")
+			return req, false, false
+		}
+		req.Intersection = parts[1]
+		req.DurationSec = 20
+		if len(parts) >= 3 {
+			duration, err := strconv.Atoi(parts[2])
+			if err != nil {
+				fmt.Println("La duracion debe ser un numero entero de segundos")
+				return req, false, false
+			}
+			req.DurationSec = duration
+		}
+		return req, false, true
+	case "force_green_wave":
+		if len(parts) < 2 {
+			fmt.Println("Uso: force_green_wave <route>")
+			return req, false, false
+		}
+		req.Route = parts[1]
+		return req, false, true
+	case "restore_automatic":
+		if len(parts) < 2 {
+			fmt.Println("Uso: restore_automatic <intersection>")
+			return req, false, false
+		}
+		req.Intersection = parts[1]
+		return req, false, true
+	default:
+		fmt.Printf("Comando no soportado: %s. Escribe 'help' para ver opciones.\n", parts[0])
+		return req, false, false
+	}
+}
+
+func executeMonitorRequest(prefix string, router *storage.Router, analyticsReq zmq4.Socket, req model.MonitorRequest) {
+	switch strings.ToLower(req.Action) {
+	case "current":
+		data, err := router.QueryCurrent(req.Intersection)
+		printResult(prefix, data, err)
+	case "history", "metric_count":
+		body, _ := json.Marshal(req)
+		data, err := router.QueryHistory(body)
+		printResult(prefix, data, err)
+	default:
+		sendAnalyticsRequest(prefix, analyticsReq, req)
+	}
+}
+
+func printResult(prefix string, data []byte, err error) {
+	if err != nil {
+		fmt.Printf("%s error: %v\n", prefix, err)
+		return
+	}
+	fmt.Printf("%s %s\n", prefix, data)
+}
+
+func sendAnalyticsRequest(prefix string, analyticsReq zmq4.Socket, req model.MonitorRequest) {
+	body, _ := json.Marshal(req)
+	if err := analyticsReq.Send(zmq4.NewMsg(body)); err != nil {
+		fmt.Printf("%s error enviando a analytics: %v\n", prefix, err)
+		return
+	}
+
+	msg, err := analyticsReq.Recv()
+	if err != nil {
+		fmt.Printf("%s error recibiendo de analytics: %v\n", prefix, err)
+		return
+	}
+
+	if len(msg.Frames) > 0 {
+		fmt.Printf("%s %s\n", prefix, msg.Frames[0])
+	}
+}
+
+func printConsoleHelp() {
+	fmt.Println(`Comandos disponibles:
+  health
+  current <intersection>
+  history
+  metric_count
+  force_green <intersection> [duration_sec]
+  force_green_wave <route>
+  restore_automatic <intersection>
+  exit | quit`)
+}
+
+func dialAnalytics(endpoint string) zmq4.Socket {
+	socket := zmq4.NewReq(context.Background())
+	if err := socket.Dial(endpoint); err != nil {
+		socket.Close()
+		log.Fatalf("dial analytics rep: %v", err)
+	}
+	return socket
 }
 
 type dbClient struct {
@@ -464,12 +370,6 @@ func (c dbClient) send(req model.MonitorRequest) ([]byte, error) {
 		return nil, err
 	}
 	return msg.Frames[0], nil
-}
-
-func exitOnErr(err error) {
-	if err != nil {
-		log.Fatal(err)
-	}
 }
 
 func getenv(key, fallback string) string {
