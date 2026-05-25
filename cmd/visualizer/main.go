@@ -222,9 +222,6 @@ func (v *visualizer) statusFromReason(previous, reason string) string {
 	case "ola_verde":
 		return "PRIORITY"
 	case "cycle_end":
-		if strings.TrimSpace(previous) != "" {
-			return previous
-		}
 		return "NORMAL"
 	default:
 		return "NORMAL"
