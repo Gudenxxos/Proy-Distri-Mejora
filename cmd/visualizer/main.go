@@ -79,6 +79,21 @@ func (v *visualizer) hasSensor(intersection string) bool {
 	return false
 }
 
+// hasSpeedSensor verifica si la interseccion puede reportar velocidad real.
+func (v *visualizer) hasSpeedSensor(intersection string) bool {
+	intersection = strings.ToUpper(strings.TrimSpace(intersection))
+	for _, sp := range v.cfg.SensorProfiles {
+		if strings.ToUpper(strings.TrimSpace(sp.Intersection)) != intersection {
+			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(sp.SensorType)) {
+		case "camara", "gps":
+			return true
+		}
+	}
+	return false
+}
+
 // consumeBroker procesa eventos de sensores y actualiza snapshots.
 func (v *visualizer) consumeBroker() {
 	sub := zmq4.NewSub(context.Background())
@@ -144,6 +159,7 @@ func (v *visualizer) consumeBroker() {
 			item := v.state[updated.Intersection]
 			item.Status = v.statusCalculatedFromData(item)
 			v.state[updated.Intersection] = item
+			updated = &item
 			v.broadcastSnapshot(*updated, topic)
 		}
 		v.mu.Unlock()
@@ -152,7 +168,11 @@ func (v *visualizer) consumeBroker() {
 
 // statusCalculatedFromData deriva un estado visual desde metricas de trafico.
 func (v *visualizer) statusCalculatedFromData(item model.IntersectionSnapshot) string {
-	if item.QueueLength >= 8 || item.AvgSpeed < 20 || item.Density >= 35 {
+	hasSpeed := v.hasSpeedSensor(item.Intersection)
+	if item.QueueLength >= 8 || item.Density >= 35 {
+		return "CONGESTION"
+	}
+	if hasSpeed && item.AvgSpeed > 0 && item.AvgSpeed < 20 {
 		return "CONGESTION"
 	}
 	return "NORMAL"
