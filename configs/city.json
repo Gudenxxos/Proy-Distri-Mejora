@@ -1,0 +1,191 @@
+{
+  "city_name": "CiudadDemo4x4",
+  "matrix_rows": 4,
+  "matrix_cols": 4,
+  "base_green_seconds": 15,
+  "congestion_extension_seconds": 10,
+  "priority_wave_seconds": 30,
+  "health_check_interval_ms": 3000,
+  "health_check_timeout_ms": 2000,
+  "endpoints": {
+    "broker_ingest": "tcp://10.43.100.155:6001",
+    "broker_fanout": "tcp://10.43.100.155:6002",
+    "analytics_rep": "tcp://10.43.97.128:7001",
+    "traffic_light_pull": "tcp://10.43.97.128:7002",
+    "traffic_light_executed_push": "tcp://10.43.97.128:7008",
+    "visualizer_light_push": "tcp://10.43.100.155:6003",
+    "db_primary_pull": "tcp://10.43.100.132:7003",
+    "db_replica_pull": "tcp://10.43.97.128:7004",
+    "db_primary_rep": "tcp://10.43.100.132:7005",
+    "db_replica_rep": "tcp://10.43.97.128:7006",
+    "visualizer_http": ":8080"
+  },
+  "intersections": [
+    {
+      "id": "INT_A1",
+      "row": "A",
+      "col": 1,
+      "has_semaphore": false,
+      "upstream": "",
+      "monitored": false
+    },
+    {
+      "id": "INT_A2",
+      "row": "A",
+      "col": 2,
+      "has_semaphore": false,
+      "upstream": "INT_A1",
+      "monitored": false
+    },
+    {
+      "id": "INT_A3",
+      "row": "A",
+      "col": 3,
+      "has_semaphore": true,
+      "upstream": "INT_A2",
+      "monitored": true
+    },
+    {
+      "id": "INT_A4",
+      "row": "A",
+      "col": 4,
+      "has_semaphore": false,
+      "upstream": "INT_A3",
+      "monitored": false
+    },
+    {
+      "id": "INT_B1",
+      "row": "B",
+      "col": 1,
+      "has_semaphore": false,
+      "upstream": "",
+      "monitored": false
+    },
+    {
+      "id": "INT_B2",
+      "row": "B",
+      "col": 2,
+      "has_semaphore": true,
+      "upstream": "INT_B1",
+      "monitored": true
+    },
+    {
+      "id": "INT_B3",
+      "row": "B",
+      "col": 3,
+      "has_semaphore": true,
+      "upstream": "INT_B2",
+      "monitored": true
+    },
+    {
+      "id": "INT_B4",
+      "row": "B",
+      "col": 4,
+      "has_semaphore": true,
+      "upstream": "INT_B3",
+      "monitored": true
+    },
+    {
+      "id": "INT_C1",
+      "row": "C",
+      "col": 1,
+      "has_semaphore": false,
+      "upstream": "",
+      "monitored": false
+    },
+    {
+      "id": "INT_C2",
+      "row": "C",
+      "col": 2,
+      "has_semaphore": false,
+      "upstream": "INT_C1",
+      "monitored": true
+    },
+    {
+      "id": "INT_C3",
+      "row": "C",
+      "col": 3,
+      "has_semaphore": true,
+      "upstream": "INT_B3",
+      "monitored": true
+    },
+    {
+      "id": "INT_C4",
+      "row": "C",
+      "col": 4,
+      "has_semaphore": false,
+      "upstream": "INT_C3",
+      "monitored": false
+    },
+    {
+      "id": "INT_D1",
+      "row": "D",
+      "col": 1,
+      "has_semaphore": false,
+      "upstream": "",
+      "monitored": false
+    },
+    {
+      "id": "INT_D2",
+      "row": "D",
+      "col": 2,
+      "has_semaphore": false,
+      "upstream": "INT_D1",
+      "monitored": false
+    },
+    {
+      "id": "INT_D3",
+      "row": "D",
+      "col": 3,
+      "has_semaphore": true,
+      "upstream": "INT_C3",
+      "monitored": true
+    },
+    {
+      "id": "INT_D4",
+      "row": "D",
+      "col": 4,
+      "has_semaphore": false,
+      "upstream": "INT_D3",
+      "monitored": false
+    }
+  ],
+  "sensor_profiles": [
+    {
+      "sensor_id": "CAM-A3",
+      "sensor_type": "camara",
+      "intersection": "INT_A3",
+      "interval_seconds": 5
+    },
+    {
+      "sensor_id": "CAM-B3",
+      "sensor_type": "camara",
+      "intersection": "INT_B3",
+      "interval_seconds": 5
+    },
+    {
+      "sensor_id": "GPS-B2",
+      "sensor_type": "gps",
+      "intersection": "INT_B2",
+      "interval_seconds": 5
+    },
+    {
+      "sensor_id": "GPS-C3",
+      "sensor_type": "gps",
+      "intersection": "INT_C3",
+      "interval_seconds": 5
+    },
+    {
+      "sensor_id": "ESP-C3",
+      "sensor_type": "espira_inductiva",
+      "intersection": "INT_C3",
+      "interval_seconds": 5
+    },
+    {
+      "sensor_id": "ESP-D3",
+      "sensor_type": "espira_inductiva",
+      "intersection": "INT_D3",
+      "interval_seconds": 5
+    }
+  ]
+}
