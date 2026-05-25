@@ -430,7 +430,6 @@ func (a *analyticsApp) processSensor(topic string, payload []byte, pushLights, p
 	}
 
 	status, command := a.evaluator.Evaluate(*latest)
-	latest.Status = status
 	a.city.SetStatus(latest.Intersection, status)
 
 	a.persistSnapshot(*latest, topic, payload, pushPrimary, pushReplica)
