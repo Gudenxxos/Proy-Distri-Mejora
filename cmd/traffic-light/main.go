@@ -50,6 +50,7 @@ func main() {
 		cfg:             cfg,
 		states:          make(map[string]string),
 		timers:          make(map[string]*intersectionTimer),
+		forceLocks:      make(map[string]time.Time),
 		pushExecuted:    pushExecuted,
 		pushVisualizer:  pushVisualizer,
 	}
@@ -97,6 +98,8 @@ type trafficLightApp struct {
 	stateMu        sync.RWMutex
 	timers         map[string]*intersectionTimer
 	timerMu        sync.Mutex
+	forceLocks     map[string]time.Time
+	forceLockMu    sync.Mutex
 	sendMu         sync.Mutex
 	pushExecuted   zmq4.Socket
 	pushVisualizer zmq4.Socket
@@ -122,6 +125,11 @@ func (app *trafficLightApp) processCommand(cmd model.LightCommand) {
 	}
 
 	now := storage.NowStoreTime()
+	if lockedUntil, locked := app.activeForceLock(intersection, now); locked {
+		log.Printf("[traffic-light] ignorando comando en %s: bloqueo force activo hasta %s", intersection, lockedUntil.Format(time.RFC3339))
+		return
+	}
+
 	previous, err := app.setLightState(intersection, phase)
 	if err != nil {
 		log.Printf("[traffic-light] no se pudo aplicar comando en %s: %v", intersection, err)
@@ -146,9 +154,44 @@ func (app *trafficLightApp) processCommand(cmd model.LightCommand) {
 		executed.Reason = "manual_command"
 	} */
 
+	if isForceProtectedReason(executed.Reason) {
+		app.setForceLock(intersection, now.Add(time.Duration(duration)*time.Second))
+	}
+
 	app.emitLightCommand(executed)
 	log.Printf("[traffic-light] %s %s -> %s por %ds (reason=%s)", intersection, previous, phase, duration, executed.Reason)
 	app.resetTimer(intersection, duration)
+}
+
+// activeForceLock devuelve el fin del bloqueo force si sigue vigente.
+func (app *trafficLightApp) activeForceLock(intersection string, now time.Time) (time.Time, bool) {
+	app.forceLockMu.Lock()
+	defer app.forceLockMu.Unlock()
+
+	until, ok := app.forceLocks[intersection]
+	if !ok {
+		return time.Time{}, false
+	}
+
+	if !now.Before(until) {
+		delete(app.forceLocks, intersection)
+		return time.Time{}, false
+	}
+
+	return until, true
+}
+
+// setForceLock fija el periodo en el que no se aceptan nuevos cambios.
+func (app *trafficLightApp) setForceLock(intersection string, until time.Time) {
+	app.forceLockMu.Lock()
+	defer app.forceLockMu.Unlock()
+	app.forceLocks[intersection] = until
+}
+
+// isForceProtectedReason identifica comandos que activan bloqueo temporal.
+func isForceProtectedReason(reason string) bool {
+	reason = strings.ToLower(strings.TrimSpace(reason))
+	return reason == "force_green" || reason == "ola_verde"
 }
 
 // resetTimer rearma la duracion activa para una interseccion.
