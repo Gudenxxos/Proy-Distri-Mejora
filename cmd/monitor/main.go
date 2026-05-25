@@ -101,6 +101,9 @@ func runConsoleLoop(prefix string, router *storage.Router, analyticsReq zmq4.Soc
 		fmt.Printf("%s> ", prefix)
 		if !scanner.Scan() {
 			fmt.Println()
+			if err := scanner.Err(); err != nil {
+				fmt.Printf("%s Error de lectura: %v\n", prefix, err)
+			}
 			return
 		}
 
