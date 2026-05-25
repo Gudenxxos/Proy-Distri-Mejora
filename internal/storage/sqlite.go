@@ -189,7 +189,7 @@ func (s *Store) QueryCurrent(intersection string) ([]model.IntersectionSnapshot,
 		`SELECT intersection, has_semaphore, queue_length, avg_speed, density, light_state, status, created_at
 		FROM traffic_events
 		WHERE intersection = ?
-		ORDER BY id DESC
+		ORDER BY created_at DESC
 		LIMIT 1`,
 		intersection,
 	)
