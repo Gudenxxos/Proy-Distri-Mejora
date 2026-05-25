@@ -317,6 +317,7 @@ func (a *analyticsApp) handleExecutedLightCommands(pullExecuted, pushPrimary, pu
 		/* AQUÍ DEBERÍA CAMBIAR EL OBJETO DE CIUDAD PARA REFLEJAR EL CAMBIO DE ESTADO */
 		a.mu.Lock()
 		a.city.SetLight(cmd.Intersection, cmd.TargetState)
+		current, currentExists := a.city.Get(cmd.Intersection)
 		a.mu.Unlock()
 
 		// Persistir comando ejecutado
@@ -331,8 +332,16 @@ func (a *analyticsApp) handleExecutedLightCommands(pullExecuted, pushPrimary, pu
 
 		snpshot := &model.IntersectionSnapshot{
 			Intersection: cmd.Intersection,
-			LightState:  cmd.TargetState,
-			UpdatedAt:   *cmd.ChangedAt,
+			LightState:   cmd.TargetState,
+			UpdatedAt:    *cmd.ChangedAt,
+		}
+		if currentExists && current != nil {
+			snpshot.QueueLength = current.QueueLength
+			snpshot.AvgSpeed = current.AvgSpeed
+			snpshot.Density = current.Density
+			snpshot.VehiclesCounted = current.VehiclesCount
+			snpshot.HasSemaphore = current.HasSemaphore
+			snpshot.Status = current.Status
 		}
 		env.Snapshot = snpshot
 		a.persistEnvelope(env, pushPrimary, pushReplica)

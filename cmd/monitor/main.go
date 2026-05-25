@@ -187,7 +187,7 @@ func executeMonitorRequest(prefix string, router *storage.Router, analyticsReq z
 	switch strings.ToLower(req.Action) {
 	case "current":
 		data, err := router.QueryCurrent(req.Intersection)
-		printResult(prefix, data, err)
+		printCurrentResult(prefix, data, err)
 	case "history", "metric_count":
 		body, _ := json.Marshal(req)
 		data, err := router.QueryHistory(body)
@@ -204,6 +204,37 @@ func printResult(prefix string, data []byte, err error) {
 		return
 	}
 	fmt.Printf("%s %s\n", prefix, data)
+}
+
+// printCurrentResult muestra el snapshot actual en un bloque legible.
+func printCurrentResult(prefix string, data []byte, err error) {
+	if err != nil {
+		fmt.Printf("%s error: %v\n", prefix, err)
+		return
+	}
+
+	var snapshots []model.IntersectionSnapshot
+	if err := json.Unmarshal(data, &snapshots); err != nil {
+		fmt.Printf("%s error decodificando current: %v\n", prefix, err)
+		return
+	}
+
+	if len(snapshots) == 0 {
+		fmt.Printf("%s current: sin datos\n", prefix)
+		return
+	}
+
+	for _, snapshot := range snapshots {
+		fmt.Printf("%s current %s\n", prefix, snapshot.Intersection)
+		fmt.Printf("%s   queue_length: %d\n", prefix, snapshot.QueueLength)
+		fmt.Printf("%s   avg_speed: %.2f\n", prefix, snapshot.AvgSpeed)
+		fmt.Printf("%s   density: %.2f\n", prefix, snapshot.Density)
+		fmt.Printf("%s   vehicles_counted: %d\n", prefix, snapshot.VehiclesCounted)
+		fmt.Printf("%s   light_state: %s\n", prefix, snapshot.LightState)
+		fmt.Printf("%s   has_semaphore: %t\n", prefix, snapshot.HasSemaphore)
+		fmt.Printf("%s   status: %s\n", prefix, snapshot.Status)
+		fmt.Printf("%s   updated_at: %s\n", prefix, snapshot.UpdatedAt.Format(time.RFC3339))
+	}
 }
 
 // sendAnalyticsRequest envia una solicitud REQ/REP al servicio analytics.
