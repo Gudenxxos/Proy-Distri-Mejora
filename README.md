@@ -493,8 +493,6 @@ Por su estructura, scripts por PC, simuladores de sensores e IPs privadas en la 
 
 ## Autores
 
-Autor inferido desde el historial Git:
-
 - Angel Morales
 - Luz Salazar
 - Guden Silva
