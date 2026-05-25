@@ -7,6 +7,7 @@ import (
 	"proy-distri/internal/model"
 )
 
+// TestEvaluateCongestion valida que una condicion de congestion emita comando.
 func TestEvaluateCongestion(t *testing.T) {
 	e := NewEvaluator(config.CityConfig{
 		BaseGreenSeconds:           15,
@@ -29,6 +30,7 @@ func TestEvaluateCongestion(t *testing.T) {
 	}
 }
 
+// TestBuildPriorityWave valida la seleccion de semaforos por ruta priorizada.
 func TestBuildPriorityWave(t *testing.T) {
 	city := &model.City{Intersections: map[string]*model.IntersectionState{
 		"INT_B2": {ID: "INT_B2", HasSemaphore: true},
@@ -47,6 +49,7 @@ func TestBuildPriorityWave(t *testing.T) {
 	}
 }
 
+// TestBuildForceGreen valida la construccion de un comando manual force_green.
 func TestBuildForceGreen(t *testing.T) {
 	e := NewEvaluator(config.CityConfig{
 		Intersections: []config.IntersectionConfig{

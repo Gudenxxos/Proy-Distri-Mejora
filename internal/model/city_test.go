@@ -6,6 +6,7 @@ import (
 	"proy-distri/internal/config"
 )
 
+// TestCityUpdateAndInfluence valida la influencia de semaforo aguas arriba.
 func TestCityUpdateAndInfluence(t *testing.T) {
 	city := NewCity(config.CityConfig{
 		CityName:         "test",

@@ -15,6 +15,7 @@ import (
 	"proy-distri/internal/model"
 )
 
+// main levanta publicadores concurrentes para cada perfil de sensor configurado.
 func main() {
 	rand.Seed(time.Now().UnixNano())
 
@@ -50,6 +51,7 @@ func main() {
 	select {}
 }
 
+// publish serializa y envia un evento al broker usando topico + payload.
 func publish(pub zmq4.Socket, topic string, payload any) {
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -65,6 +67,7 @@ func publish(pub zmq4.Socket, topic string, payload any) {
 	log.Printf("[sensor-node] topic=%s payload=%s", topic, string(data))
 }
 
+// buildEvent construye eventos sinteticos segun el tipo de sensor.
 func buildEvent(profile config.SensorProfile) (string, any) {
 	now := time.Now().UTC()
 	baseQueue := rand.Intn(9) + 1
@@ -110,6 +113,7 @@ func buildEvent(profile config.SensorProfile) (string, any) {
 	}
 }
 
+// getenv lee una variable de entorno con fallback.
 func getenv(key, fallback string) string {
 	value := os.Getenv(key)
 	if value == "" {

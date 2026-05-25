@@ -19,6 +19,7 @@ import (
 	"proy-distri/internal/storage"
 )
 
+// main selecciona modo CLI o auxiliar segun variables de entorno.
 func main() {
 	cfgPath := getenv("CITY_CONFIG", "configs/city.json")
 	cfg, err := config.Load(cfgPath)
@@ -57,6 +58,7 @@ func runAuxiliaryMonitor(cfg config.CityConfig) {
 	runConsoleLoop("[monitor-aux-cli]", &router, analyticsReq)
 }
 
+// runCLIMonitor ejecuta el monitor interactivo principal.
 func runCLIMonitor(cfg config.CityConfig) {
 	var (
 		action       = flag.String("action", "", "Accion: health, current, history, force_green, force_green_wave, restore_automatic, metric_count")
@@ -91,6 +93,7 @@ func runCLIMonitor(cfg config.CityConfig) {
 	runConsoleLoop("[monitor-cli]", &router, analyticsReq)
 }
 
+// runConsoleLoop procesa comandos de consola hasta salida explicita.
 func runConsoleLoop(prefix string, router *storage.Router, analyticsReq zmq4.Socket) {
 	scanner := bufio.NewScanner(os.Stdin)
 
@@ -119,6 +122,7 @@ func runConsoleLoop(prefix string, router *storage.Router, analyticsReq zmq4.Soc
 	}
 }
 
+// parseConsoleCommand interpreta una linea de entrada a solicitud de monitor.
 func parseConsoleCommand(line string) (model.MonitorRequest, bool, bool) {
 	parts := strings.Fields(line)
 	action := strings.ToLower(parts[0])
@@ -178,6 +182,7 @@ func parseConsoleCommand(line string) (model.MonitorRequest, bool, bool) {
 	}
 }
 
+// executeMonitorRequest enruta consultas a BD o comandos a analytics.
 func executeMonitorRequest(prefix string, router *storage.Router, analyticsReq zmq4.Socket, req model.MonitorRequest) {
 	switch strings.ToLower(req.Action) {
 	case "current":
@@ -192,6 +197,7 @@ func executeMonitorRequest(prefix string, router *storage.Router, analyticsReq z
 	}
 }
 
+// printResult imprime salida estandar de consultas.
 func printResult(prefix string, data []byte, err error) {
 	if err != nil {
 		fmt.Printf("%s error: %v\n", prefix, err)
@@ -200,6 +206,7 @@ func printResult(prefix string, data []byte, err error) {
 	fmt.Printf("%s %s\n", prefix, data)
 }
 
+// sendAnalyticsRequest envia una solicitud REQ/REP al servicio analytics.
 func sendAnalyticsRequest(prefix string, analyticsReq zmq4.Socket, req model.MonitorRequest) {
 	body, _ := json.Marshal(req)
 	if err := analyticsReq.Send(zmq4.NewMsg(body)); err != nil {
@@ -218,6 +225,7 @@ func sendAnalyticsRequest(prefix string, analyticsReq zmq4.Socket, req model.Mon
 	}
 }
 
+// printConsoleHelp muestra el listado resumido de comandos disponibles.
 func printConsoleHelp() {
 	fmt.Println(`Comandos disponibles:
   health
@@ -230,6 +238,7 @@ func printConsoleHelp() {
   exit | quit`)
 }
 
+// dialAnalytics crea el socket REQ contra el endpoint de analytics.
 func dialAnalytics(endpoint string) zmq4.Socket {
 	socket := zmq4.NewReq(context.Background())
 	if err := socket.Dial(endpoint); err != nil {
@@ -239,14 +248,17 @@ func dialAnalytics(endpoint string) zmq4.Socket {
 	return socket
 }
 
+// dbClient encapsula acceso REQ/REP hacia db-server.
 type dbClient struct {
 	endpoint string
 }
 
+// newDBClient construye un cliente de base de datos para un endpoint.
 func newDBClient(endpoint string) dbClient {
 	return dbClient{endpoint: endpoint}
 }
 
+// QueryCurrent solicita el ultimo estado de una interseccion.
 func (c dbClient) QueryCurrent(intersection string) ([]byte, error) {
 	req := model.MonitorRequest{
 		Action:       "current",
@@ -256,6 +268,7 @@ func (c dbClient) QueryCurrent(intersection string) ([]byte, error) {
 	return c.send(req)
 }
 
+// QueryHistory solicita historico de eventos para un rango temporal.
 func (c dbClient) QueryHistory(payload []byte) ([]byte, error) {
 	var req model.MonitorRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
@@ -264,6 +277,7 @@ func (c dbClient) QueryHistory(payload []byte) ([]byte, error) {
 	return c.send(req)
 }
 
+// send ejecuta una llamada REQ/REP de bajo nivel contra db-server.
 func (c dbClient) send(req model.MonitorRequest) ([]byte, error) {
 	socket := zmq4.NewReq(context.Background())
 	defer socket.Close()
@@ -282,6 +296,7 @@ func (c dbClient) send(req model.MonitorRequest) ([]byte, error) {
 	return msg.Frames[0], nil
 }
 
+// getenv lee una variable de entorno con fallback.
 func getenv(key, fallback string) string {
 	value := os.Getenv(key)
 	if value == "" {

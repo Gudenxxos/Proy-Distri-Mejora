@@ -2,6 +2,7 @@ package model
 
 import "time"
 
+// Topicos y constantes de dominio compartidas entre procesos.
 const (
 	TopicCamera     = "sensor.camera"
 	TopicGPS        = "sensor.gps"
@@ -19,6 +20,7 @@ const (
 	FlowAxisHorizontal = "HORIZONTAL"
 )
 
+// CameraEvent representa una lectura puntual de camara.
 type CameraEvent struct {
 	SensorID          string    `json:"sensor_id"`
 	TipoSensor        string    `json:"tipo_sensor"`
@@ -28,6 +30,7 @@ type CameraEvent struct {
 	Timestamp         time.Time `json:"timestamp"`
 }
 
+// InductiveEvent representa conteos acumulados de espiras.
 type InductiveEvent struct {
 	SensorID          string    `json:"sensor_id"`
 	TipoSensor        string    `json:"tipo_sensor"`
@@ -38,6 +41,7 @@ type InductiveEvent struct {
 	TimestampFin      time.Time `json:"timestamp_fin"`
 }
 
+// GPSEvent representa una lectura de congestion sintetica por GPS.
 type GPSEvent struct {
 	SensorID          string    `json:"sensor_id"`
 	TipoSensor        string    `json:"tipo_sensor"`
@@ -48,6 +52,7 @@ type GPSEvent struct {
 	Timestamp         time.Time `json:"timestamp"`
 }
 
+// IntersectionSnapshot resume el estado actual de una interseccion.
 type IntersectionSnapshot struct {
 	Intersection    string    `json:"intersection"`
 	QueueLength     int       `json:"queue_length"`
@@ -60,6 +65,7 @@ type IntersectionSnapshot struct {
 	UpdatedAt       time.Time `json:"updated_at"`
 }
 
+// LightCommand representa una orden de cambio de fase de semaforo.
 type LightCommand struct {
 	CommandID     string     `json:"command_id"`
 	Intersection  string     `json:"intersection"`
@@ -72,6 +78,7 @@ type LightCommand struct {
 	PriorityRoute string     `json:"priority_route,omitempty"`
 }
 
+// LightStateEvent notifica un cambio aplicado de estado de semaforo.
 type LightStateEvent struct {
 	CommandID    string    `json:"command_id,omitempty"`
 	Intersection string    `json:"intersection"`
@@ -80,6 +87,7 @@ type LightStateEvent struct {
 	ChangedAt    time.Time `json:"changed_at"`
 }
 
+// MonitorRequest modela una solicitud de operacion del monitor.
 type MonitorRequest struct {
 	Action       string    `json:"action"`
 	Intersection string    `json:"intersection,omitempty"`
@@ -90,12 +98,14 @@ type MonitorRequest struct {
 	RequestedAt  time.Time `json:"requested_at"`
 }
 
+// MonitorResponse encapsula una respuesta estandar de monitor/servicios.
 type MonitorResponse struct {
 	Success bool   `json:"success"`
 	Message string `json:"message"`
 	Data    any    `json:"data,omitempty"`
 }
 
+// PersistEnvelope define el formato comun para persistencia en BD.
 type PersistEnvelope struct {
 	Kind         string                `json:"kind"`
 	Topic        string                `json:"topic"`

@@ -15,6 +15,7 @@ import (
 	"proy-distri/internal/storage"
 )
 
+// main inicia el servidor de persistencia/consulta en modo primario o replica.
 func main() {
 	cfgPath := getenv("CITY_CONFIG", "configs/city.json")
 	cfg, err := config.Load(cfgPath)
@@ -97,6 +98,7 @@ func main() {
 	}
 }
 
+// handleQuery resuelve operaciones de monitoreo contra el almacenamiento.
 func handleQuery(store *storage.Store, req model.MonitorRequest) model.MonitorResponse {
 	switch strings.ToLower(req.Action) {
 	case "health":
@@ -137,6 +139,7 @@ func handleQuery(store *storage.Store, req model.MonitorRequest) model.MonitorRe
 	}
 }
 
+// getenv lee una variable de entorno con fallback.
 func getenv(key, fallback string) string {
 	value := os.Getenv(key)
 	if value == "" {

@@ -9,12 +9,15 @@ import (
 	"proy-distri/internal/config"
 )
 
+// modelTimeZone unifica el huso horario operativo del dominio.
 var modelTimeZone = time.FixedZone("UTC-5", -5*60*60)
 
+// nowModelTime devuelve la hora de referencia usada en el modelo de ciudad.
 func nowModelTime() time.Time {
 	return time.Now().In(modelTimeZone)
 }
 
+// IntersectionState mantiene el estado operativo actual de una interseccion.
 type IntersectionState struct {
 	ID             string
 	Row            string
@@ -31,6 +34,7 @@ type IntersectionState struct {
 	LastTransition time.Time
 }
 
+// City representa el estado global de la malla de intersecciones.
 type City struct {
 	Name          string
 	Rows          int
@@ -39,6 +43,7 @@ type City struct {
 	Intersections map[string]*IntersectionState
 }
 
+// NewCity crea el estado inicial de ciudad a partir de la configuracion.
 func NewCity(cfg config.CityConfig) *City {
 	city := &City{
 		Name:          cfg.CityName,
@@ -69,11 +74,13 @@ func NewCity(cfg config.CityConfig) *City {
 	return city
 }
 
+// Get obtiene una interseccion por ID.
 func (c *City) Get(id string) (*IntersectionState, bool) {
 	item, ok := c.Intersections[id]
 	return item, ok
 }
 
+// UpdateFromCamera aplica datos provenientes de sensores de camara.
 func (c *City) UpdateFromCamera(intersection string, volume int, speed float64) (*IntersectionSnapshot, error) {
 	item, ok := c.Get(intersection)
 	if !ok {
@@ -87,6 +94,7 @@ func (c *City) UpdateFromCamera(intersection string, volume int, speed float64) 
 	return c.snapshot(item), nil
 }
 
+// UpdateFromGPS aplica datos de congestion y velocidad desde GPS.
 func (c *City) UpdateFromGPS(intersection string, density, speed float64, status string) (*IntersectionSnapshot, error) {
 	item, ok := c.Get(intersection)
 	if !ok {
@@ -101,6 +109,7 @@ func (c *City) UpdateFromGPS(intersection string, density, speed float64, status
 	return c.snapshot(item), nil
 }
 
+// UpdateFromInductive aplica conteos de sensores inductivos.
 func (c *City) UpdateFromInductive(intersection string, counted int) (*IntersectionSnapshot, error) {
 	item, ok := c.Get(intersection)
 	if !ok {
@@ -113,6 +122,7 @@ func (c *City) UpdateFromInductive(intersection string, counted int) (*Intersect
 	return c.snapshot(item), nil
 }
 
+// ApplyInfluence ajusta el estado local segun el semaforo aguas arriba.
 func (c *City) ApplyInfluence(intersection string) {
 	item, ok := c.Get(intersection)
 	if !ok || item.Upstream == "" {
@@ -140,6 +150,7 @@ func (c *City) ApplyInfluence(intersection string) {
 	}
 }
 
+// SetLight cambia la fase del semaforo de una interseccion.
 func (c *City) SetLight(intersection, state string) (*IntersectionSnapshot, error) {
 	item, ok := c.Get(intersection)
 	if !ok {
@@ -161,6 +172,7 @@ func (c *City) SetLight(intersection, state string) (*IntersectionSnapshot, erro
 	return c.snapshot(item), nil
 }
 
+// SetStatus actualiza el estado semantico de una interseccion.
 func (c *City) SetStatus(intersection, status string) (*IntersectionSnapshot, error) {
 	item, ok := c.Get(intersection)
 	if !ok {
@@ -172,6 +184,7 @@ func (c *City) SetStatus(intersection, status string) (*IntersectionSnapshot, er
 	return c.snapshot(item), nil
 }
 
+// SnapshotAll devuelve una vista del estado actual para todas las intersecciones.
 func (c *City) SnapshotAll() []IntersectionSnapshot {
 	out := make([]IntersectionSnapshot, 0, len(c.Intersections))
 	for _, item := range c.Intersections {
@@ -180,6 +193,7 @@ func (c *City) SnapshotAll() []IntersectionSnapshot {
 	return out
 }
 
+// snapshot construye una vista serializable desde un estado interno.
 func (c *City) snapshot(item *IntersectionState) *IntersectionSnapshot {
 	return &IntersectionSnapshot{
 		Intersection:    item.ID,
@@ -194,10 +208,12 @@ func (c *City) snapshot(item *IntersectionState) *IntersectionSnapshot {
 	}
 }
 
+// PreferredPhaseForIntersection define la fase preferida base por interseccion.
 func PreferredPhaseForIntersection(row string, col int) string {
 	return LightPhaseHorizontal
 }
 
+// PreferredPhaseForIntersectionID calcula la fase preferida desde un ID textual.
 func PreferredPhaseForIntersectionID(id string) string {
 	row, col, ok := parseIntersectionID(id)
 	if !ok {
@@ -206,6 +222,7 @@ func PreferredPhaseForIntersectionID(id string) string {
 	return PreferredPhaseForIntersection(row, col)
 }
 
+// OppositePhase devuelve la fase opuesta para alternancia de semaforo.
 func OppositePhase(phase string) string {
 	switch strings.ToUpper(phase) {
 	case LightPhaseVertical:
@@ -217,6 +234,7 @@ func OppositePhase(phase string) string {
 	}
 }
 
+// phaseAllowsAxis indica si una fase habilita un eje de flujo.
 func phaseAllowsAxis(phase, axis string) bool {
 	phase = strings.ToUpper(phase)
 	axis = strings.ToUpper(axis)
@@ -224,6 +242,7 @@ func phaseAllowsAxis(phase, axis string) bool {
 		(phase == LightPhaseHorizontal && axis == FlowAxisHorizontal)
 }
 
+// flowAxisBetween determina el eje compartido entre dos intersecciones.
 func flowAxisBetween(upstream, current *IntersectionState) string {
 	switch {
 	case upstream.Row == current.Row:
@@ -235,6 +254,7 @@ func flowAxisBetween(upstream, current *IntersectionState) string {
 	}
 }
 
+// parseIntersectionID separa fila y columna desde IDs del tipo INT_A3.
 func parseIntersectionID(id string) (string, int, bool) {
 	label := strings.TrimPrefix(strings.ToUpper(strings.TrimSpace(id)), "INT_")
 	if len(label) < 2 {

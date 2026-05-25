@@ -5,8 +5,11 @@ import (
 	"os"
 )
 
+// Endpoints centraliza todas las direcciones de comunicacion entre componentes.
 type Endpoints struct {
+	// BrokerIngest recibe eventos crudos desde sensores.
 	BrokerIngest              string `json:"broker_ingest"`
+	// BrokerFanout redistribuye eventos hacia consumidores.
 	BrokerFanout              string `json:"broker_fanout"`
 	AnalyticsREP              string `json:"analytics_rep"`
 	TrafficLightPull          string `json:"traffic_light_pull"`
@@ -19,6 +22,7 @@ type Endpoints struct {
 	VisualizerHTTP            string `json:"visualizer_http"`
 }
 
+// IntersectionConfig define la posicion y capacidades de una interseccion.
 type IntersectionConfig struct {
 	ID           string `json:"id"`
 	Row          string `json:"row"`
@@ -28,6 +32,7 @@ type IntersectionConfig struct {
 	Monitored    bool   `json:"monitored"`
 }
 
+// SensorProfile describe el origen y frecuencia de un sensor simulado.
 type SensorProfile struct {
 	SensorID        string `json:"sensor_id"`
 	SensorType      string `json:"sensor_type"`
@@ -35,6 +40,7 @@ type SensorProfile struct {
 	IntervalSeconds int    `json:"interval_seconds"`
 }
 
+// CityConfig agrupa la configuracion global de la simulacion.
 type CityConfig struct {
 	CityName                   string               `json:"city_name"`
 	MatrixRows                 int                  `json:"matrix_rows"`
@@ -49,6 +55,7 @@ type CityConfig struct {
 	SensorProfiles             []SensorProfile      `json:"sensor_profiles"`
 }
 
+// Load carga y decodifica la configuracion de ciudad desde un archivo JSON.
 func Load(path string) (CityConfig, error) {
 	var cfg CityConfig
 

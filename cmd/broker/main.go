@@ -11,6 +11,7 @@ import (
 	"proy-distri/internal/model"
 )
 
+// main inicia el broker y arma el pipeline concurrente de recepcion y fanout.
 func main() {
 	cfgPath := getenv("CITY_CONFIG", "configs/city.json")
 	cfg, err := config.Load(cfgPath)
@@ -86,6 +87,7 @@ func main() {
 	}
 }
 
+// cloneMsg realiza una copia profunda de frames para evitar aliasing entre goroutines.
 func cloneMsg(msg zmq4.Msg) zmq4.Msg {
 	cloned := make([][]byte, len(msg.Frames))
 	for i, frame := range msg.Frames {
@@ -98,6 +100,7 @@ func cloneMsg(msg zmq4.Msg) zmq4.Msg {
 	return zmq4.Msg{Frames: cloned}
 }
 
+// getenv lee una variable de entorno con valor por defecto.
 func getenv(key, fallback string) string {
 	value := os.Getenv(key)
 	if value == "" {

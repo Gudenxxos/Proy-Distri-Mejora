@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// fakeClient simula un cliente de consulta para pruebas de enrutamiento.
 type fakeClient struct {
 	data []byte
 	err  error
@@ -18,6 +19,7 @@ func (f fakeClient) QueryHistory(payload []byte) ([]byte, error) {
 	return f.data, f.err
 }
 
+// TestRouterFallsBackToReplica valida failover cuando el primario falla.
 func TestRouterFallsBackToReplica(t *testing.T) {
 	router := Router{
 		Primary: fakeClient{err: errors.New("down")},

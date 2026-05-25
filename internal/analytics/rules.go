@@ -10,12 +10,15 @@ import (
 	"proy-distri/internal/model"
 )
 
+// analyticsTimeZone fija la referencia horaria para decisiones del evaluador.
 var analyticsTimeZone = time.FixedZone("UTC-5", -5*60*60)
 
+// nowAnalyticsTime devuelve la hora operacional del motor de reglas.
 func nowAnalyticsTime() time.Time {
 	return time.Now().In(analyticsTimeZone)
 }
 
+// Constantes de clasificacion y motivos de decision.
 const (
 	StatusNormal      = "NORMAL"
 	StatusCongestion  = "CONGESTION"
@@ -28,10 +31,12 @@ const (
 	RequestMonitoring = "monitoring"
 )
 
+// Evaluator aplica reglas de negocio sobre snapshots de intersecciones.
 type Evaluator struct {
 	cfg config.CityConfig
 }
 
+// NewEvaluator crea un evaluador con la configuracion operativa actual.
 func NewEvaluator(cfg config.CityConfig) Evaluator {
 	return Evaluator{cfg: cfg}
 }
@@ -71,7 +76,7 @@ func (e Evaluator) Evaluate(snapshot model.IntersectionSnapshot) (string, *model
 	}
 }
 
-// determinePhaseForIntersection determines the light phase based on row/column priority.
+// determinePhaseForIntersection define la siguiente fase para una interseccion.
 func (e Evaluator) determinePhaseForIntersection(intersectionID string, currentPhase string) string {
 // Si el estado actual es HORIZONTAL, return VERTICAL
 	// Si el estado actual es VERTICAL, return HORIZONTAL
@@ -89,6 +94,7 @@ func (e Evaluator) determinePhaseForIntersection(intersectionID string, currentP
 	
 
 
+// parseIntersectionID descompone IDs de interseccion en fila y columna.
 func parseIntersectionID(id string) (string, int, bool) {
 	label := strings.TrimPrefix(strings.ToUpper(strings.TrimSpace(id)), "INT_")
 	if len(label) < 2 {
@@ -107,6 +113,7 @@ func parseIntersectionID(id string) (string, int, bool) {
 	return row, colValue, true
 }
 
+// BuildPriorityWave genera comandos de prioridad para una fila o columna.
 func (e Evaluator) BuildPriorityWave(route string, city *model.City) []model.LightCommand {
 	route = strings.ToUpper(strings.TrimSpace(route))
 	commands := make([]model.LightCommand, 0)
@@ -173,6 +180,7 @@ func (e Evaluator) BuildPriorityWave(route string, city *model.City) []model.Lig
 	return commands
 }
 
+// BuildForceGreen construye un comando manual de prioridad temporal.
 func (e Evaluator) BuildForceGreen(intersection string, durationSec int, currentPhase string) (model.LightCommand, error) {
 	if durationSec <= 0 {
 		return model.LightCommand{}, fmt.Errorf("duracion invalida para force_green: %d", durationSec)
@@ -194,6 +202,7 @@ func (e Evaluator) BuildForceGreen(intersection string, durationSec int, current
 	}, nil
 }
 
+// hasSemaphoreIntersection valida si la interseccion soporta comandos de semaforo.
 func (e Evaluator) hasSemaphoreIntersection(intersectionID string) bool {
 	intersectionID = strings.ToUpper(strings.TrimSpace(intersectionID))
 	for _, item := range e.cfg.Intersections {

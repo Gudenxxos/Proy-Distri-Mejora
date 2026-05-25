@@ -19,6 +19,7 @@ import (
 	"proy-distri/internal/storage"
 )
 
+// main inicializa analytics y orquesta el procesamiento central de eventos.
 func main() {
 	cfgPath := getenv("CITY_CONFIG", "configs/city.json")
 	cfg, err := config.Load(cfgPath)
@@ -38,6 +39,7 @@ func main() {
 	}
 }
 
+// analyticsApp concentra estado, reglas y sockets de coordinacion.
 type analyticsApp struct {
 	cfg             config.CityConfig
 	evaluator       analyticslogic.Evaluator
@@ -50,6 +52,7 @@ type analyticsApp struct {
 	auxMonitorMutex sync.Mutex  // Protege acceso a auxMonitorCmd
 }
 
+// run configura sockets, workers y bucle principal de consumo desde broker.
 func (a *analyticsApp) run() error {
 	ctx := context.Background()
 
@@ -344,6 +347,7 @@ func (a *analyticsApp) IsPC3Healthy() bool {
 	return a.isPc3Healthy
 }
 
+// processSensor aplica un evento de sensor sobre el modelo y decide acciones.
 func (a *analyticsApp) processSensor(topic string, payload []byte, pushLights, pushPrimary, pushReplica zmq4.Socket) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -477,6 +481,7 @@ func (a *analyticsApp) handleRequest(req model.MonitorRequest, pushLights, pushP
 	}
 }
 
+// sendLightCommand publica comandos hacia traffic-light con serializacion segura.
 func (a *analyticsApp) sendLightCommand(cmd model.LightCommand, pushLights zmq4.Socket) {
 	// Asignar RequestedAt y dejar ChangedAt vacío
 	cmd.RequestedAt = storage.NowStoreTime()
@@ -488,6 +493,7 @@ func (a *analyticsApp) sendLightCommand(cmd model.LightCommand, pushLights zmq4.
 	a.sendMu.Unlock()
 }
 
+// persistSnapshot adapta un snapshot a sobre de persistencia.
 func (a *analyticsApp) persistSnapshot(snapshot model.IntersectionSnapshot, topic string, raw []byte, pushPrimary, pushReplica zmq4.Socket) {
 	env := model.PersistEnvelope{
 		Kind:       "snapshot",
@@ -499,6 +505,7 @@ func (a *analyticsApp) persistSnapshot(snapshot model.IntersectionSnapshot, topi
 	a.persistEnvelope(env, pushPrimary, pushReplica)
 }
 
+// persistEnvelope aplica politica de circuit breaker para persistencia primaria.
 func (a *analyticsApp) persistEnvelope(env model.PersistEnvelope, pushPrimary, pushReplica zmq4.Socket) {
 	data, _ := json.Marshal(env)
 	a.sendMu.Lock()
@@ -521,10 +528,12 @@ func (a *analyticsApp) persistEnvelope(env model.PersistEnvelope, pushPrimary, p
 	}
 }
 
+// commandID genera IDs de comando ordenables por tiempo.
 func commandID() string {
 	return "cmd-" + storage.NowStoreTime().Format("20060102150405.000000000")
 }
 
+// getenv lee una variable de entorno con fallback.
 func getenv(key, fallback string) string {
 	value := os.Getenv(key)
 	if value == "" {
