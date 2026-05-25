@@ -320,6 +320,8 @@ func (a *analyticsApp) handleExecutedLightCommands(pullExecuted, pushPrimary, pu
 		current, currentExists := a.city.Get(cmd.Intersection)
 		a.mu.Unlock()
 
+		calculatedStatus := a.calculateStatus(current, cmd.Reason)
+
 		// Persistir comando ejecutado
 		data, _ := json.Marshal(cmd)
 		env := model.PersistEnvelope{
@@ -334,6 +336,7 @@ func (a *analyticsApp) handleExecutedLightCommands(pullExecuted, pushPrimary, pu
 			Intersection: cmd.Intersection,
 			LightState:   cmd.TargetState,
 			UpdatedAt:    *cmd.ChangedAt,
+			Status:       calculatedStatus,
 		}
 		if currentExists && current != nil {
 			snpshot.QueueLength = current.QueueLength
@@ -341,11 +344,31 @@ func (a *analyticsApp) handleExecutedLightCommands(pullExecuted, pushPrimary, pu
 			snpshot.Density = current.Density
 			snpshot.VehiclesCounted = current.VehiclesCount
 			snpshot.HasSemaphore = current.HasSemaphore
-			snpshot.Status = current.Status
+			snpshot.Status = calculatedStatus
 		}
 		env.Snapshot = snpshot
 		a.persistEnvelope(env, pushPrimary, pushReplica)
-		a.persistSnapshot(*snpshot, "solved.state", data, pushPrimary, pushReplica)
+		a.persistSnapshot(*snpshot, "light.change", data, pushPrimary, pushReplica)
+	}
+}
+
+func (a *analyticsApp) calculateStatus(current *model.IntersectionState, reason string) string {
+	previous := current.Status
+	
+	switch strings.ToLower(strings.TrimSpace(reason)) {
+	case "deteccion_congestion":
+		if previous == "NORMAL" {
+			return "NORMAL"
+		}
+		return "SOLVED"
+	case "force_green":
+		return "PRIORITY"
+	case "ola_verde":
+		return "PRIORITY"
+	case "cycle_end":
+		return "NORMAL"
+	default:
+		return "NORMAL"
 	}
 }
 
