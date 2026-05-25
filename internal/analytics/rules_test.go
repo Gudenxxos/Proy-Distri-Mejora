@@ -12,6 +12,11 @@ func TestEvaluateCongestion(t *testing.T) {
 	e := NewEvaluator(config.CityConfig{
 		BaseGreenSeconds:           15,
 		CongestionExtensionSeconds: 10,
+		SensorProfiles: []config.SensorProfile{{
+			SensorID:     "CAM-B3",
+			SensorType:   "camara",
+			Intersection: "INT_B3",
+		}},
 	})
 
 	status, cmd := e.Evaluate(model.IntersectionSnapshot{
@@ -27,6 +32,34 @@ func TestEvaluateCongestion(t *testing.T) {
 	}
 	if cmd == nil || cmd.DurationSec != 25 || cmd.TargetState != model.LightPhaseHorizontal {
 		t.Fatalf("unexpected command: %+v", cmd)
+	}
+}
+
+// TestEvaluateIgnoresInductiveOnlyIntersection validates that inductive-only nodes do not trigger congestion.
+func TestEvaluateIgnoresInductiveOnlyIntersection(t *testing.T) {
+	e := NewEvaluator(config.CityConfig{
+		BaseGreenSeconds:           15,
+		CongestionExtensionSeconds: 10,
+		SensorProfiles: []config.SensorProfile{{
+			SensorID:     "ESP-D3",
+			SensorType:   "espira_inductiva",
+			Intersection: "INT_D3",
+		}},
+	})
+
+	status, cmd := e.Evaluate(model.IntersectionSnapshot{
+		Intersection: "INT_D3",
+		QueueLength:  10,
+		AvgSpeed:     0,
+		Density:      40,
+		HasSemaphore: true,
+	})
+
+	if status != StatusNormal {
+		t.Fatalf("expected normal for inductive-only intersection, got %s", status)
+	}
+	if cmd != nil {
+		t.Fatalf("expected no command for inductive-only intersection, got %+v", cmd)
 	}
 }
 

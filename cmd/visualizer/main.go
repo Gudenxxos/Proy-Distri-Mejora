@@ -249,6 +249,9 @@ func (v *visualizer) broadcastSnapshot(snapshot model.IntersectionSnapshot, topi
 func (v *visualizer) statusFromReason(previous, reason string) string {
 	switch strings.ToLower(strings.TrimSpace(reason)) {
 	case "deteccion_congestion":
+		if previous == "NORMAL" {
+			return "NORMAL"
+		}
 		return "SOLVED"
 	case "force_green":
 		return "PRIORITY"

@@ -47,11 +47,12 @@ func NewEvaluator(cfg config.CityConfig) Evaluator {
 //   - Status: NORMAL, CONGESTION, or PRIORITY
 //   - Command: Light command to apply at row/column level, or nil if no action needed
 func (e Evaluator) Evaluate(snapshot model.IntersectionSnapshot) (string, *model.LightCommand) {
+	congestionCapable := e.hasCongestionSensor(snapshot.Intersection)
 	hasSpeed := e.hasSpeedSensor(snapshot.Intersection)
 	congestedBySpeed := hasSpeed && snapshot.AvgSpeed > 0 && snapshot.AvgSpeed < 20
 
 	switch {
-	case snapshot.QueueLength >= 8 || congestedBySpeed || snapshot.Density >= 35:
+	case congestionCapable && (snapshot.QueueLength >= 8 || congestedBySpeed || snapshot.Density >= 35):
 		// Congestion detected in this intersection - apply row/column wide command
 		duration := e.cfg.BaseGreenSeconds + e.cfg.CongestionExtensionSeconds
 		return StatusCongestion, &model.LightCommand{
@@ -214,6 +215,23 @@ func (e Evaluator) hasSemaphoreIntersection(intersectionID string) bool {
 		}
 	}
 	return false
+}
+
+// hasCongestionSensor verifica si la interseccion tiene sensores capaces de sustentar congestion.
+func (e Evaluator) hasCongestionSensor(intersection string) bool {
+	intersection = strings.ToUpper(strings.TrimSpace(intersection))
+	found := false
+	for _, profile := range e.cfg.SensorProfiles {
+		if strings.ToUpper(strings.TrimSpace(profile.Intersection)) != intersection {
+			continue
+		}
+		found = true
+		switch strings.ToLower(strings.TrimSpace(profile.SensorType)) {
+		case "camara", "gps":
+			return true
+		}
+	}
+	return !found
 }
 
 // hasSpeedSensor verifica si la interseccion puede reportar velocidad real.
