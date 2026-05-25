@@ -10,6 +10,10 @@ echo "Services: db-primary, monitor"
 echo "========================================"
 echo
 
+rm -f primary.db
+
+echo
+
 echo "[1/2] Compiling db-server..."
 go build -o db-server ./cmd/db-server
 echo "[OK] db-server compiled successfully"

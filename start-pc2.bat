@@ -3,6 +3,8 @@ setlocal enabledelayedexpansion
 
 cd /d "%~dp0"
 
+if exist replica.db del /f /q replica.db >nul 2>&1
+
 echo ========================================
 echo Starting PC2 services from "%cd%"
 echo PC2 IP: 172.20.10.8
