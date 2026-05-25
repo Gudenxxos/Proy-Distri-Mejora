@@ -316,11 +316,14 @@ func (a *analyticsApp) handleExecutedLightCommands(pullExecuted, pushPrimary, pu
 
 		/* AQUÍ DEBERÍA CAMBIAR EL OBJETO DE CIUDAD PARA REFLEJAR EL CAMBIO DE ESTADO */
 		a.mu.Lock()
+		
 		a.city.SetLight(cmd.Intersection, cmd.TargetState)
 		current, currentExists := a.city.Get(cmd.Intersection)
+		calculatedStatus := a.calculateStatus(current, cmd.Reason)
+		a.city.SetStatus(cmd.Intersection, calculatedStatus)
+
 		a.mu.Unlock()
 
-		calculatedStatus := a.calculateStatus(current, cmd.Reason)
 
 		// Persistir comando ejecutado
 		data, _ := json.Marshal(cmd)
