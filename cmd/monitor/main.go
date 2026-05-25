@@ -215,8 +215,27 @@ func printCurrentResult(prefix string, data []byte, err error) {
 
 	var snapshots []model.IntersectionSnapshot
 	if err := json.Unmarshal(data, &snapshots); err != nil {
-		fmt.Printf("%s error decodificando current: %v\n", prefix, err)
-		return
+		var response struct {
+			Success bool            `json:"success"`
+			Message string          `json:"message"`
+			Data    json.RawMessage `json:"data"`
+		}
+		if err := json.Unmarshal(data, &response); err != nil {
+			fmt.Printf("%s error decodificando current: %v\n", prefix, err)
+			return
+		}
+		if len(response.Data) == 0 {
+			if response.Message != "" {
+				fmt.Printf("%s current: %s\n", prefix, response.Message)
+			} else {
+				fmt.Printf("%s current: sin datos\n", prefix)
+			}
+			return
+		}
+		if err := json.Unmarshal(response.Data, &snapshots); err != nil {
+			fmt.Printf("%s error decodificando current: %v\n", prefix, err)
+			return
+		}
 	}
 
 	if len(snapshots) == 0 {

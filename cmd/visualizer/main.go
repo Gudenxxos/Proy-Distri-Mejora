@@ -184,9 +184,9 @@ func (v *visualizer) resolveStatus(previousStatus, calculatedStatus string) stri
 	previousStatus = strings.ToUpper(strings.TrimSpace(previousStatus))
 	calculatedStatus = strings.ToUpper(strings.TrimSpace(calculatedStatus))
 
-	if calculatedStatus == "CONGESTION" && (previousStatus == "PRIORITY" || previousStatus == "PRIORITY_BUT_CONGESTION") {
-		return "PRIORITY_BUT_CONGESTION"
-	} else if calculatedStatus == "NORMAL" && previousStatus == "PRIORITY_BUT_CONGESTION" {
+	if calculatedStatus == "CONGESTION" && (previousStatus == "PRIORITY" || previousStatus == "CONGESTION_BUT_PRIORITY") {
+		return "CONGESTION_BUT_PRIORITY"
+	} else if calculatedStatus == "NORMAL" && (previousStatus == "CONGESTION_BUT_PRIORITY" || previousStatus == "PRIORITY") {
 		return "PRIORITY"
 	}
 
