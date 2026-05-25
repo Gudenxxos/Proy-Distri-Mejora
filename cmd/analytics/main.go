@@ -109,7 +109,7 @@ func (a *analyticsApp) run() error {
 	// Goroutine para verificar periódicamente la salud del DB primario
 	go a.healthCheckLoop(ctx)
 
-	go a.handleRequests(rep, pushLights, pushPrimary, pushReplica)
+	go a.handleRequests(rep, pushLights)
 
 	// Goroutine para recibir y persistir comandos ejecutados desde traffic-light
 	go a.handleExecutedLightCommands(pullExecutedLights, pushPrimary, pushReplica)
@@ -416,7 +416,7 @@ func (a *analyticsApp) processSensor(topic string, payload []byte, pushLights, p
 }
 
 /* Función para escuchar solicitudes de monitoreo */
-func (a *analyticsApp) handleRequests(rep, pushLights, pushPrimary, pushReplica zmq4.Socket) {
+func (a *analyticsApp) handleRequests(rep, pushLights zmq4.Socket) {
 	for {
 		msg, err := rep.Recv()
 		if err != nil {
@@ -435,14 +435,14 @@ func (a *analyticsApp) handleRequests(rep, pushLights, pushPrimary, pushReplica 
 			continue
 		}
 
-		response := a.handleRequest(req, pushLights, pushPrimary, pushReplica)
+		response := a.handleRequest(req, pushLights)
 		data, _ := json.Marshal(response)
 		_ = rep.Send(zmq4.NewMsg(data))
 	}
 }
 
 /* Función para ejecutar solicitudes de monitoreo */
-func (a *analyticsApp) handleRequest(req model.MonitorRequest, pushLights, pushPrimary, pushReplica zmq4.Socket) model.MonitorResponse {
+func (a *analyticsApp) handleRequest(req model.MonitorRequest, pushLights zmq4.Socket) model.MonitorResponse {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 

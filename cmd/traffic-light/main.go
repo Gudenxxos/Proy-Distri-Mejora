@@ -105,7 +105,7 @@ type trafficLightApp struct {
 	pushVisualizer zmq4.Socket
 }
 
-// processCommand valida y aplica un comando de luz recibido.
+// processCommand valida y aplica un comando de cambio de fase, emitiendo resultados.
 func (app *trafficLightApp) processCommand(cmd model.LightCommand) {
 	intersection := normalizeIntersectionID(cmd.Intersection)
 	if !app.hasSemaphore(intersection) {
@@ -150,9 +150,6 @@ func (app *trafficLightApp) processCommand(cmd model.LightCommand) {
 	if executed.RequestedBy == "" {
 		executed.RequestedBy = "analytics"
 	}
-	/* if executed.Reason == "" {
-		executed.Reason = "manual_command"
-	} */
 
 	if isForceProtectedReason(executed.Reason) {
 		app.setForceLock(intersection, now.Add(time.Duration(duration)*time.Second))

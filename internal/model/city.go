@@ -179,6 +179,13 @@ func (c *City) SetStatus(intersection, status string) (*IntersectionSnapshot, er
 		return nil, fmt.Errorf("intersection %s not found", intersection)
 	}
 
+	previousStatus := item.Status
+	if previousStatus == "PRIORITY" && status == "CONGESTION" {
+		item.Status = "CONGESTION_BUT_PRIORITY"
+	} else if previousStatus == "CONGESTION_BUT_PRIORITY" && status == "NORMAL" {
+		item.Status = "PRIORITY"
+	}
+
 	item.Status = strings.ToUpper(status)
 	item.LastUpdate = nowModelTime()
 	return c.snapshot(item), nil
