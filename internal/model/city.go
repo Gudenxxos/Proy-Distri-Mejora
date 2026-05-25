@@ -186,7 +186,6 @@ func (c *City) SetStatus(intersection, status string) (*IntersectionSnapshot, er
 		item.Status = "PRIORITY"
 	}
 
-	item.Status = strings.ToUpper(status)
 	item.LastUpdate = nowModelTime()
 	return c.snapshot(item), nil
 }
