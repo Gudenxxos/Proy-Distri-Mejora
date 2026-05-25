@@ -184,6 +184,8 @@ func (c *City) SetStatus(intersection, status string) (*IntersectionSnapshot, er
 		item.Status = "CONGESTION_BUT_PRIORITY"
 	} else if previousStatus == "CONGESTION_BUT_PRIORITY" && status == "NORMAL" {
 		item.Status = "PRIORITY"
+	} else {
+		item.Status = status
 	}
 
 	item.LastUpdate = nowModelTime()

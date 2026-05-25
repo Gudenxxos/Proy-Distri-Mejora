@@ -65,15 +65,15 @@ visualizer <--- SSE/HTTP ----- navegador
 
 ### Servicios principales
 
-| Servicio | Ruta | Responsabilidad |
-| --- | --- | --- |
-| Broker | `cmd/broker` | Recibe eventos de sensores y los redistribuye por topico. |
-| Sensor Node | `cmd/sensor-node` | Genera eventos sinteticos segun `sensor_profiles`. |
-| Analytics | `cmd/analytics` | Procesa eventos, actualiza modelo de ciudad, evalua reglas y emite comandos. |
+| Servicio      | Ruta                | Responsabilidad                                                                        |
+| ------------- | ------------------- | -------------------------------------------------------------------------------------- |
+| Broker        | `cmd/broker`        | Recibe eventos de sensores y los redistribuye por topico.                              |
+| Sensor Node   | `cmd/sensor-node`   | Genera eventos sinteticos segun `sensor_profiles`.                                     |
+| Analytics     | `cmd/analytics`     | Procesa eventos, actualiza modelo de ciudad, evalua reglas y emite comandos.           |
 | Traffic Light | `cmd/traffic-light` | Ejecuta cambios de semaforo, alterna ciclos automaticos y publica comandos ejecutados. |
-| DB Server | `cmd/db-server` | Persiste eventos y responde consultas en rol `primary` o `replica`. |
-| Monitor | `cmd/monitor` | CLI interactivo y cliente de consultas/comandos. |
-| Visualizer | `cmd/visualizer` | Servidor web del tablero en tiempo real. |
+| DB Server     | `cmd/db-server`     | Persiste eventos y responde consultas en rol `primary` o `replica`.                    |
+| Monitor       | `cmd/monitor`       | CLI interactivo y cliente de consultas/comandos.                                       |
+| Visualizer    | `cmd/visualizer`    | Servidor web del tablero en tiempo real.                                               |
 
 ### Patrones detectados
 
@@ -172,30 +172,30 @@ Este archivo define:
 
 ### Variables de entorno
 
-| Variable | Usada por | Valor por defecto | Descripcion |
-| --- | --- | --- | --- |
-| `CITY_CONFIG` | Todos los servicios | `configs/city.json` | Ruta del archivo de configuracion. |
-| `DB_ROLE` | `db-server` | `primary` | Rol de base de datos: `primary` o `replica`. |
-| `DB_PATH` | `db-server` | `<role>.db` | Ruta del archivo SQLite. |
-| `AUX` | `monitor` | `false` | Activa modo monitor auxiliar cuando vale `true`. |
+| Variable      | Usada por           | Valor por defecto   | Descripcion                                      |
+| ------------- | ------------------- | ------------------- | ------------------------------------------------ |
+| `CITY_CONFIG` | Todos los servicios | `configs/city.json` | Ruta del archivo de configuracion.               |
+| `DB_ROLE`     | `db-server`         | `primary`           | Rol de base de datos: `primary` o `replica`.     |
+| `DB_PATH`     | `db-server`         | `<role>.db`         | Ruta del archivo SQLite.                         |
+| `AUX`         | `monitor`           | `false`             | Activa modo monitor auxiliar cuando vale `true`. |
 
 ### Endpoints detectados
 
 Definidos en `configs/city.json`:
 
-| Clave | Valor actual | Uso |
-| --- | --- | --- |
-| `broker_ingest` | `tcp://10.43.100.155:6001` | Entrada de eventos al broker. |
-| `broker_fanout` | `tcp://10.43.100.155:6002` | Salida fanout del broker. |
-| `analytics_rep` | `tcp://10.43.97.128:7001` | API REQ/REP de analytics para monitor. |
-| `traffic_light_pull` | `tcp://10.43.97.128:7002` | Entrada de comandos al actuador. |
-| `traffic_light_executed_push` | `tcp://10.43.97.128:7008` | Comandos ejecutados hacia analytics. |
-| `visualizer_light_push` | `tcp://10.43.100.155:6003` | Cambios de semaforo hacia visualizer. |
-| `db_primary_pull` | `tcp://10.43.100.132:7003` | Persistencia hacia DB primario. |
-| `db_replica_pull` | `tcp://10.43.97.128:7004` | Persistencia hacia DB replica. |
-| `db_primary_rep` | `tcp://10.43.100.132:7005` | Consultas REQ/REP al primario. |
-| `db_replica_rep` | `tcp://10.43.97.128:7006` | Consultas REQ/REP a la replica. |
-| `visualizer_http` | `:8080` | Servidor web del visualizador. |
+| Clave                         | Valor actual               | Uso                                    |
+| ----------------------------- | -------------------------- | -------------------------------------- |
+| `broker_ingest`               | `tcp://10.43.100.155:6001` | Entrada de eventos al broker.          |
+| `broker_fanout`               | `tcp://10.43.100.155:6002` | Salida fanout del broker.              |
+| `analytics_rep`               | `tcp://10.43.97.128:7001`  | API REQ/REP de analytics para monitor. |
+| `traffic_light_pull`          | `tcp://10.43.97.128:7002`  | Entrada de comandos al actuador.       |
+| `traffic_light_executed_push` | `tcp://10.43.97.128:7008`  | Comandos ejecutados hacia analytics.   |
+| `visualizer_light_push`       | `tcp://10.43.100.155:6003` | Cambios de semaforo hacia visualizer.  |
+| `db_primary_pull`             | `tcp://10.43.100.132:7003` | Persistencia hacia DB primario.        |
+| `db_replica_pull`             | `tcp://10.43.97.128:7004`  | Persistencia hacia DB replica.         |
+| `db_primary_rep`              | `tcp://10.43.100.132:7005` | Consultas REQ/REP al primario.         |
+| `db_replica_rep`              | `tcp://10.43.97.128:7006`  | Consultas REQ/REP a la replica.        |
+| `visualizer_http`             | `:8080`                    | Servidor web del visualizador.         |
 
 ## Ejecucion
 
@@ -294,11 +294,11 @@ $env:DB_PATH = "primary.db"
 
 El servicio `visualizer` expone:
 
-| Endpoint HTTP | Metodo | Descripcion |
-| --- | --- | --- |
-| `/` | GET | Pagina HTML del tablero. |
-| `/api/state` | GET | Estado actual de todas las intersecciones en JSON. |
-| `/events` | GET | Stream SSE con actualizaciones en tiempo real. |
+| Endpoint HTTP | Metodo | Descripcion                                        |
+| ------------- | ------ | -------------------------------------------------- |
+| `/`           | GET    | Pagina HTML del tablero.                           |
+| `/api/state`  | GET    | Estado actual de todas las intersecciones en JSON. |
+| `/events`     | GET    | Stream SSE con actualizaciones en tiempo real.     |
 
 Ejemplo:
 
@@ -349,33 +349,33 @@ Tambien permite una accion inicial por flags:
 
 El `db-server` soporta estas acciones mediante `MonitorRequest`:
 
-| Accion | Descripcion |
-| --- | --- |
-| `health` | Verifica disponibilidad del servidor de BD. |
-| `current` | Devuelve el ultimo snapshot de una interseccion. |
-| `history` | Devuelve eventos dentro de un rango temporal. |
-| `metric_count` | Cuenta eventos dentro de un rango temporal. |
+| Accion         | Descripcion                                      |
+| -------------- | ------------------------------------------------ |
+| `health`       | Verifica disponibilidad del servidor de BD.      |
+| `current`      | Devuelve el ultimo snapshot de una interseccion. |
+| `history`      | Devuelve eventos dentro de un rango temporal.    |
+| `metric_count` | Cuenta eventos dentro de un rango temporal.      |
 
 ### Acciones REQ/REP de analytics
 
 El servicio `analytics` soporta:
 
-| Accion | Descripcion |
-| --- | --- |
-| `health` | Verifica disponibilidad de analytics. |
-| `force_green` | Fuerza una fase verde temporal en una interseccion con semaforo. |
-| `force_green_wave` | Genera una ola verde para una fila o columna. |
-| `restore_automatic` | Restaura una fase preferida/base para la interseccion. |
+| Accion              | Descripcion                                                      |
+| ------------------- | ---------------------------------------------------------------- |
+| `health`            | Verifica disponibilidad de analytics.                            |
+| `force_green`       | Fuerza una fase verde temporal en una interseccion con semaforo. |
+| `force_green_wave`  | Genera una ola verde para una fila o columna.                    |
+| `restore_automatic` | Restaura una fase preferida/base para la interseccion.           |
 
 ## Modelo de dominio
 
 ### Topicos de sensores
 
-| Topico | Evento | Datos principales |
-| --- | --- | --- |
-| `sensor.camera` | `CameraEvent` | Volumen y velocidad promedio. |
-| `sensor.gps` | `GPSEvent` | Nivel de congestion, densidad y velocidad promedio. |
-| `sensor.inductive` | `InductiveEvent` | Vehiculos contados por intervalo. |
+| Topico             | Evento           | Datos principales                                   |
+| ------------------ | ---------------- | --------------------------------------------------- |
+| `sensor.camera`    | `CameraEvent`    | Volumen y velocidad promedio.                       |
+| `sensor.gps`       | `GPSEvent`       | Nivel de congestion, densidad y velocidad promedio. |
+| `sensor.inductive` | `InductiveEvent` | Vehiculos contados por intervalo.                   |
 
 ### Estados de semaforo
 
@@ -459,11 +459,11 @@ Campos principales:
 
 ## Scripts utiles
 
-| Script | Plataforma | Descripcion |
-| --- | --- | --- |
-| `start-pc1.sh` | Linux/Unix | Compila e inicia `broker`, `sensor-node` y `visualizer`. |
-| `start-pc2.bat` | Windows | Compila e inicia `db-server` replica, `traffic-light` y `analytics`. |
-| `start-pc3.sh` | Linux/Unix | Compila e inicia `db-server` primario y `monitor`. |
+| Script          | Plataforma | Descripcion                                                          |
+| --------------- | ---------- | -------------------------------------------------------------------- |
+| `start-pc1.sh`  | Linux/Unix | Compila e inicia `broker`, `sensor-node` y `visualizer`.             |
+| `start-pc2.bat` | Windows    | Compila e inicia `db-server` replica, `traffic-light` y `analytics`. |
+| `start-pc3.sh`  | Linux/Unix | Compila e inicia `db-server` primario y `monitor`.                   |
 
 Comandos utiles adicionales:
 
@@ -495,10 +495,6 @@ Por su estructura, scripts por PC, simuladores de sensores e IPs privadas en la 
 
 Autor inferido desde el historial Git:
 
-- Gudenxxo `<sebastianguden@gmail.com>`
-
-No se detecto un archivo dedicado de autores o contributors.
-
-## Licencia
-
-No se detecto archivo `LICENSE` ni declaracion explicita de licencia en el repositorio. Antes de reutilizar o distribuir el codigo, se recomienda agregar una licencia clara.
+- Angel Morales
+- Luz Salazar
+- Guden Silva
