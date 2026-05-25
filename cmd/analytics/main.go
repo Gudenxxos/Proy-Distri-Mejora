@@ -401,7 +401,7 @@ func (a *analyticsApp) processSensor(topic string, payload []byte, pushLights, p
 	case model.TopicGPS:
 		var event model.GPSEvent
 		if err = json.Unmarshal(payload, &event); err == nil {
-			snapshot, err = a.city.UpdateFromGPS(event.Interseccion, event.Densidad, event.VelocidadPromedio, event.NivelCongestion)
+			snapshot, err = a.city.UpdateFromGPS(event.Interseccion, event.Densidad, event.VelocidadPromedio)
 		}
 	case model.TopicInductive:
 		var event model.InductiveEvent
@@ -430,7 +430,11 @@ func (a *analyticsApp) processSensor(topic string, payload []byte, pushLights, p
 	}
 
 	status, command := a.evaluator.Evaluate(*latest)
-	a.city.SetStatus(latest.Intersection, status)
+	
+	updated, err := a.city.SetStatus(latest.Intersection, status)
+	if err == nil && updated != nil {
+		latest = updated
+	}
 
 	a.persistSnapshot(*latest, topic, payload, pushPrimary, pushReplica)
 

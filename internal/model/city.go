@@ -95,7 +95,7 @@ func (c *City) UpdateFromCamera(intersection string, volume int, speed float64) 
 }
 
 // UpdateFromGPS aplica datos de congestion y velocidad desde GPS.
-func (c *City) UpdateFromGPS(intersection string, density, speed float64, status string) (*IntersectionSnapshot, error) {
+func (c *City) UpdateFromGPS(intersection string, density, speed float64) (*IntersectionSnapshot, error) {
 	item, ok := c.Get(intersection)
 	if !ok {
 		return nil, fmt.Errorf("intersection %s not found", intersection)
@@ -104,7 +104,6 @@ func (c *City) UpdateFromGPS(intersection string, density, speed float64, status
 	item.Density = density
 	item.AvgSpeed = speed
 	item.LastUpdate = nowModelTime()
-	item.Status = status
 
 	return c.snapshot(item), nil
 }
