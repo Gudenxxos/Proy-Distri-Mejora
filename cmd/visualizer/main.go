@@ -157,7 +157,8 @@ func (v *visualizer) consumeBroker() {
 		}
 		if updated != nil {
 			item := v.state[updated.Intersection]
-			item.Status = v.statusCalculatedFromData(item)
+			previousStatus := item.Status
+			item.Status = v.resolveStatus(previousStatus, v.statusCalculatedFromData(item))
 			v.state[updated.Intersection] = item
 			updated = &item
 			v.broadcastSnapshot(*updated, topic)
@@ -176,6 +177,18 @@ func (v *visualizer) statusCalculatedFromData(item model.IntersectionSnapshot) s
 		return "CONGESTION"
 	}
 	return "NORMAL"
+}
+
+// resolveStatus conserva el contexto de prioridad cuando la data ya indica congestion.
+func (v *visualizer) resolveStatus(previousStatus, calculatedStatus string) string {
+	previousStatus = strings.ToUpper(strings.TrimSpace(previousStatus))
+	calculatedStatus = strings.ToUpper(strings.TrimSpace(calculatedStatus))
+
+	if calculatedStatus == "CONGESTION" && (previousStatus == "PRIORITY" || previousStatus == "PRIORITY_BUT_CONGESTION") {
+		return "PRIORITY_BUT_CONGESTION"
+	}
+
+	return calculatedStatus
 }
 
 // consumeLightCommands recibe LightCommand desde analytics para actualizar semáforos
