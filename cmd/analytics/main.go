@@ -507,6 +507,10 @@ func (a *analyticsApp) persistSnapshot(snapshot model.IntersectionSnapshot, topi
 
 // persistEnvelope aplica politica de circuit breaker para persistencia primaria.
 func (a *analyticsApp) persistEnvelope(env model.PersistEnvelope, pushPrimary, pushReplica zmq4.Socket) {
+	if env.EventID == "" {
+		env.EventID = eventID()
+	}
+
 	data, _ := json.Marshal(env)
 	a.sendMu.Lock()
 	defer a.sendMu.Unlock()
@@ -531,6 +535,11 @@ func (a *analyticsApp) persistEnvelope(env model.PersistEnvelope, pushPrimary, p
 // commandID genera IDs de comando ordenables por tiempo.
 func commandID() string {
 	return "cmd-" + storage.NowStoreTime().Format("20060102150405.000000000")
+}
+
+// eventID genera el identificador comun de cada evento persistido.
+func eventID() string {
+	return "evt-" + storage.NowStoreTime().Format("20060102150405.000000000")
 }
 
 // getenv lee una variable de entorno con fallback.

@@ -57,6 +57,7 @@ func (s *Store) initSchema() error {
 	schema := `
 CREATE TABLE IF NOT EXISTS traffic_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+	event_id TEXT,
   kind TEXT NOT NULL,
   topic TEXT NOT NULL,
   intersection TEXT,
@@ -85,6 +86,7 @@ CREATE TABLE IF NOT EXISTS light_actions (
 		return err
 	}
 
+	_, _ = s.db.Exec(`ALTER TABLE traffic_events ADD COLUMN event_id TEXT`)
 	_, _ = s.db.Exec(`ALTER TABLE traffic_events ADD COLUMN has_semaphore INTEGER DEFAULT 0`)
 	return nil
 }
@@ -124,8 +126,9 @@ func (s *Store) InsertEnvelope(env model.PersistEnvelope) error {
 
 	_, err := s.db.Exec(
 		`INSERT INTO traffic_events
-		(kind, topic, intersection, has_semaphore, status, light_state, queue_length, avg_speed, density, raw_payload, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		(event_id, kind, topic, intersection, has_semaphore, status, light_state, queue_length, avg_speed, density, raw_payload, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		env.EventID,
 		env.Kind,
 		env.Topic,
 		intersection,

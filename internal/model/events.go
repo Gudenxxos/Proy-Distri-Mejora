@@ -108,6 +108,7 @@ type MonitorResponse struct {
 // PersistEnvelope define el formato comun para persistencia en BD.
 type PersistEnvelope struct {
 	Kind         string                `json:"kind"`
+	EventID      string                `json:"event_id"`
 	Topic        string                `json:"topic"`
 	RawPayload   string                `json:"raw_payload"`
 	Snapshot     *IntersectionSnapshot `json:"snapshot,omitempty"`
