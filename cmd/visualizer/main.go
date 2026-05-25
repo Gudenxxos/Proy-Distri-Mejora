@@ -186,6 +186,8 @@ func (v *visualizer) resolveStatus(previousStatus, calculatedStatus string) stri
 
 	if calculatedStatus == "CONGESTION" && (previousStatus == "PRIORITY" || previousStatus == "PRIORITY_BUT_CONGESTION") {
 		return "PRIORITY_BUT_CONGESTION"
+	} else if calculatedStatus == "NORMAL" && previousStatus == "PRIORITY_BUT_CONGESTION" {
+		return "PRIORITY"
 	}
 
 	return calculatedStatus
