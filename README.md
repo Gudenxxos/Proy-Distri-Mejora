@@ -75,7 +75,7 @@ visualizer <--- SSE/HTTP ----- navegador
 | Monitor       | `cmd/monitor`       | CLI interactivo y cliente de consultas/comandos.                                       |
 | Visualizer    | `cmd/visualizer`    | Servidor web del tablero en tiempo real.                                               |
 
-### Patrones detectados
+### Patrones utilizados
 
 - **Event-driven architecture** con eventos serializados en JSON.
 - **Pub/Sub y Push/Pull** mediante ZeroMQ.
@@ -179,7 +179,7 @@ Este archivo define:
 | `DB_PATH`     | `db-server`         | `<role>.db`         | Ruta del archivo SQLite.                         |
 | `AUX`         | `monitor`           | `false`             | Activa modo monitor auxiliar cuando vale `true`. |
 
-### Endpoints detectados
+### Endpoints utilizados
 
 Definidos en `configs/city.json`:
 
@@ -492,8 +492,6 @@ Por su estructura, scripts por PC, simuladores de sensores e IPs privadas en la 
 - Agregar autenticacion/autorizacion si el monitor se expone fuera de una red controlada.
 
 ## Autores
-
-Autor inferido desde el historial Git:
 
 - Angel Morales
 - Luz Salazar
