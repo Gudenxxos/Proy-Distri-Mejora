@@ -81,7 +81,7 @@
       "id": "INT_B4",
       "row": "B",
       "col": 4,
-      "has_semaphore": true,
+      "has_semaphore": false,
       "upstream": "INT_B3",
       "monitored": true
     },
@@ -105,7 +105,7 @@
       "id": "INT_C3",
       "row": "C",
       "col": 3,
-      "has_semaphore": true,
+      "has_semaphore": false,
       "upstream": "INT_B3",
       "monitored": true
     },
@@ -137,7 +137,7 @@
       "id": "INT_D3",
       "row": "D",
       "col": 3,
-      "has_semaphore": true,
+      "has_semaphore": false,
       "upstream": "INT_C3",
       "monitored": true
     },
